@@ -1,0 +1,17 @@
+<view class="page" wx:if="{{product}}">
+  <image class="hero" src="{{product.coverUrl}}" mode="aspectFill" />
+  <view class="panel">
+    <view class="name">{{product.name}}</view>
+    <view class="subtitle">{{product.subtitle}}</view>
+    <view class="price">¥{{product.priceText}}</view>
+  </view>
+  <view class="bar">
+    <view class="stepper">
+      <text bindtap="dec">-</text>
+      <text>{{quantity}}</text>
+      <text bindtap="inc">+</text>
+    </view>
+    <view class="primary-btn cart" bindtap="addCart">加入购物车</view>
+    <view class="primary-btn buy" bindtap="buyNow">直接结算</view>
+  </view>
+</view>

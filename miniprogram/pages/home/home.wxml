@@ -1,0 +1,25 @@
+<view class="page">
+  <view class="search">
+    <input placeholder="搜索商品" value="{{keyword}}" bindinput="onInput" confirm-type="search" bindconfirm="search" />
+    <button bindtap="search">搜索</button>
+  </view>
+  <scroll-view class="categories" scroll-x>
+    <block wx:for="{{categories}}" wx:key="value">
+      <view class="category {{category === item.value ? 'active' : ''}}" data-value="{{item.value}}" bindtap="selectCategory">{{item.label}}</view>
+    </block>
+  </scroll-view>
+  <view class="banner">
+    <view class="title">今日代购</view>
+    <view class="desc">KS同款好物，集中采购配送</view>
+  </view>
+  <block wx:for="{{products}}" wx:key="id">
+    <product-card product="{{item}}" />
+  </block>
+  <view wx:if="{{products.length}}" class="page-control">
+    <view class="page-btn {{hasPrev ? '' : 'disabled'}}" bindtap="prevPage">上一页</view>
+    <view class="page-info">第 {{page}} / {{totalPages}} 页，共 {{total}} 件</view>
+    <view class="page-btn {{hasNext ? '' : 'disabled'}}" bindtap="nextPage">下一页</view>
+  </view>
+  <view wx:if="{{loading}}" class="pager">加载中...</view>
+  <view wx:if="{{products.length === 0 && !loading}}" class="empty">没有找到商品</view>
+</view>

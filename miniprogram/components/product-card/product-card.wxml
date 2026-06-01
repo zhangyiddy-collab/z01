@@ -1,0 +1,11 @@
+<view class="card" bindtap="open">
+  <image class="cover" src="{{product.coverUrl}}" mode="aspectFill" />
+  <view class="info">
+    <view class="name">{{product.name}}</view>
+    <view class="subtitle">{{product.subtitle || '新鲜好物 快速代购'}}</view>
+    <view class="bottom">
+      <text class="price">¥{{product.priceText}}</text>
+      <text class="tag">今日可订</text>
+    </view>
+  </view>
+</view>

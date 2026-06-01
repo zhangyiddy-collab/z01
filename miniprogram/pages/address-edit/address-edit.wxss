@@ -1,0 +1,8 @@
+.form input {
+  height: 88rpx;
+  padding: 0 24rpx;
+  margin-bottom: 18rpx;
+  background: #fff;
+  border-radius: 14rpx;
+}
+

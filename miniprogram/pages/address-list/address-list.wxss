@@ -1,0 +1,41 @@
+.address {
+  padding: 24rpx;
+  margin-bottom: 18rpx;
+  background: #fff;
+  border-radius: 16rpx;
+}
+.checkout-tip {
+  padding: 18rpx 22rpx;
+  margin-bottom: 18rpx;
+  border-radius: 14rpx;
+  background: #dcfce7;
+  color: #16a34a;
+  font-weight: 700;
+}
+.top {
+  font-weight: 800;
+  margin-bottom: 10rpx;
+}
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16rpx;
+}
+.delete {
+  padding: 10rpx 20rpx;
+  border-radius: 999rpx;
+  background: #fee2e2;
+  color: #dc2626;
+  font-size: 26rpx;
+  font-weight: 700;
+}
+.select {
+  margin-top: 18rpx;
+  height: 64rpx;
+  line-height: 64rpx;
+  text-align: center;
+  border-radius: 12rpx;
+  background: #22c55e;
+  color: #fff;
+  font-weight: 700;
+}

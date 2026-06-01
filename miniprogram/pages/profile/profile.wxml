@@ -1,0 +1,12 @@
+<view class="page">
+  <view class="card">
+    <view class="avatar">KS</view>
+    <view>
+      <view class="name">KS同款代购</view>
+      <view class="muted">{{logged ? '已登录' : '请先登录'}}</view>
+    </view>
+  </view>
+  <view wx:if="{{!logged}}" class="primary-btn" bindtap="login">微信登录</view>
+  <view class="menu" bindtap="addresses">地址管理</view>
+</view>
+

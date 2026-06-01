@@ -1,0 +1,24 @@
+.order {
+  padding: 24rpx;
+  margin-bottom: 18rpx;
+  background: #fff;
+  border-radius: 16rpx;
+}
+.row {
+  display: flex;
+  justify-content: space-between;
+  color: #64748b;
+}
+.status {
+  color: #22c55e;
+}
+.amount {
+  margin-top: 20rpx;
+  font-size: 36rpx;
+  font-weight: 800;
+}
+.empty {
+  padding: 160rpx 0;
+  color: #94a3b8;
+  text-align: center;
+}

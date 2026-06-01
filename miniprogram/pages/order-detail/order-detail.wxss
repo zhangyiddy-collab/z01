@@ -1,0 +1,29 @@
+.panel, .item {
+  padding: 24rpx;
+  margin-bottom: 18rpx;
+  background: #fff;
+  border-radius: 16rpx;
+}
+.status {
+  color: #22c55e;
+  font-size: 36rpx;
+  font-weight: 800;
+}
+.item {
+  display: flex;
+  gap: 18rpx;
+  align-items: center;
+}
+.item image {
+  width: 128rpx;
+  height: 128rpx;
+  border-radius: 12rpx;
+}
+.info {
+  flex: 1;
+}
+.row {
+  display: flex;
+  justify-content: space-between;
+}
+

@@ -1,0 +1,12 @@
+<view class="page">
+  <block wx:for="{{orders}}" wx:key="id">
+    <view class="order" data-id="{{item.id}}" bindtap="open">
+      <view class="row">
+        <text>{{item.orderNo}}</text>
+        <text class="status">{{item.statusText}}</text>
+      </view>
+      <view class="amount">¥{{item.amountText}}</view>
+    </view>
+  </block>
+  <view wx:if="{{orders.length === 0}}" class="empty">暂无订单</view>
+</view>

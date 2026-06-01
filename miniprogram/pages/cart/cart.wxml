@@ -1,0 +1,19 @@
+<view class="page">
+  <block wx:for="{{items}}" wx:key="id">
+    <view class="item">
+      <checkbox checked="{{checked[item.productId]}}" data-id="{{item.productId}}" bindtap="toggle" />
+      <image src="{{item.product.coverUrl}}" mode="aspectFill" />
+      <view class="info">
+        <view class="name">{{item.product.name}}</view>
+        <view class="muted">x {{item.quantity}}</view>
+        <view class="price">¥{{item.priceText}}</view>
+      </view>
+      <view class="delete" data-id="{{item.productId}}" catchtap="remove">删除</view>
+    </view>
+  </block>
+  <view wx:if="{{items.length === 0}}" class="empty">购物车是空的</view>
+  <view class="settle">
+    <view>合计 <text class="price">¥{{totalText}}</text></view>
+    <view class="primary-btn btn" bindtap="checkout">去结算</view>
+  </view>
+</view>

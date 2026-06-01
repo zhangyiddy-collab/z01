@@ -1,0 +1,14 @@
+<view class="page">
+  <view wx:if="{{checkout}}" class="checkout-tip">正在结算 {{productIds.length}} 件商品</view>
+  <block wx:for="{{list}}" wx:key="id">
+    <view class="address" data-id="{{item.id}}" bindtap="choose">
+      <view class="top">{{item.name}} {{item.phone}}</view>
+      <view class="muted">{{item.communityName}} {{item.buildingNo}}栋 {{item.unitNo}}单元 {{item.roomNo}}</view>
+      <view class="actions">
+        <view class="delete" data-id="{{item.id}}" catchtap="remove">删除</view>
+      </view>
+      <view wx:if="{{checkout}}" class="select" data-id="{{item.id}}" catchtap="choose">{{submitting ? '结算中...' : '选择并结算'}}</view>
+    </view>
+  </block>
+  <view class="primary-btn" bindtap="add">新增地址</view>
+</view>

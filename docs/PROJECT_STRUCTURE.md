@@ -1,0 +1,56 @@
+# 项目目录结构
+
+```text
+KS同款代购/
+  backend/
+    src/
+      common/
+        decorators/
+        filters/
+        guards/
+        interceptors/
+        utils/
+      config/
+      database/
+      modules/
+        auth/
+        users/
+        products/
+        cart/
+        addresses/
+        orders/
+        payments/
+        admin/
+        logs/
+        exports/
+        cos/
+      app.module.ts
+      main.ts
+    test/
+    docs/
+    package.json
+    docker-compose.yml
+    .env.example
+  miniprogram/
+    pages/
+      home/
+      product/
+      cart/
+      orders/
+      order-detail/
+      address-list/
+      address-edit/
+      profile/
+    components/
+      product-card/
+    utils/
+    app.js
+    app.json
+    app.wxss
+    project.config.json
+  docs/
+    DATABASE_DESIGN.md
+    BUG_CHECK.md
+    LOCAL_TESTING.md
+    DEPLOYMENT.md
+```

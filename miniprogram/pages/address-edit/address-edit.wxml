@@ -1,0 +1,9 @@
+<view class="page form">
+  <input placeholder="姓名" data-key="name" bindinput="input" />
+  <input placeholder="手机号" data-key="phone" bindinput="input" />
+  <input placeholder="小区名称" data-key="communityName" bindinput="input" />
+  <input placeholder="栋号" data-key="buildingNo" bindinput="input" />
+  <input placeholder="单元号" data-key="unitNo" bindinput="input" />
+  <input placeholder="门牌号" data-key="roomNo" bindinput="input" />
+  <view class="primary-btn" bindtap="save">保存</view>
+</view>
