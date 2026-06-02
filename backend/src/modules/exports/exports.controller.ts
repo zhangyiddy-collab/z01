@@ -41,7 +41,6 @@ ${periods.map((period) => renderPurchaseSection(period)).join('')}
   }
 
   @Get('delivery')
-  @AdminRoles(AdminRole.ADMIN, AdminRole.DELIVERY)
   @Header('Content-Type', 'text/html; charset=utf-8')
   async deliveryHtml() {
     const tickets = await this.exportsService.deliveryTickets();
@@ -81,7 +80,6 @@ ${periods.map((period) => renderPurchaseSection(period)).join('')}
   }
 
   @Get('delivery.pdf')
-  @AdminRoles(AdminRole.ADMIN, AdminRole.DELIVERY)
   async deliveryPdf(@Res() res: Response) {
     const buffer = await this.exportsService.deliveryPdf();
     res.setHeader('Content-Type', 'application/pdf');

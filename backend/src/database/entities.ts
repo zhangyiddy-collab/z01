@@ -82,7 +82,7 @@ export class AdminUserEntity {
   @Column({ name: 'password_hash', length: 255 })
   passwordHash!: string;
 
-  @Column({ type: 'simple-enum', enum: AdminRole, default: AdminRole.DELIVERY })
+  @Column({ type: 'simple-enum', enum: AdminRole, default: AdminRole.ADMIN })
   role!: AdminRole;
 
   @Column({ type: 'tinyint', default: 1 })

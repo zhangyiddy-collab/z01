@@ -1,14 +1,14 @@
-import { Body, Controller, Get, Header, Headers, Param, Patch, Post, Query, Redirect, Req, Res, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { Body, Controller, Get, Header, Headers, Param, Patch, Post, Query, Redirect, Res, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { IsEnum, IsInt, IsOptional, IsString, Min } from 'class-validator';
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import { mkdirSync } from 'fs';
 import { diskStorage } from 'multer';
 import { extname, join } from 'path';
 import { AdminRole, OrderStatus, ProductCategory, ProductStatus } from '../../database/entities';
 import { AdminAuthGuard } from './admin-auth.guard';
 import { AdminPublic, AdminRoles } from './admin-auth.decorators';
-import { AdminService, AdminSession, FinanceStats, PeriodMetric } from './admin.service';
+import { AdminService, FinanceStats, PeriodMetric } from './admin.service';
 
 class ProductDto {
   @IsString()
@@ -53,9 +53,6 @@ class AccountDto {
 
   @IsString()
   password!: string;
-
-  @IsEnum(AdminRole)
-  role!: AdminRole;
 }
 
 @UseGuards(AdminAuthGuard)
@@ -77,31 +74,28 @@ export class AdminController {
     try {
       const result = await this.adminService.login(dto.username, dto.password);
       res.setHeader('Set-Cookie', this.adminService.loginCookie(result.token));
-      const target = result.admin.role === AdminRole.DELIVERY ? '/api/admin/exports/delivery' : safeNext(dto.next);
-      return res.redirect(target);
+      return res.redirect(safeNext(dto.next));
     } catch (error) {
       const message = error instanceof Error ? error.message : '登录失败';
-      return res.type('html').send(this.adminService.renderLogin(message, safeNext(dto.next)));
+      return res.status(401).type('html').send(this.adminService.renderLogin(message, safeNext(dto.next)));
     }
   }
 
   @Post('logout')
-  @AdminRoles(AdminRole.ADMIN, AdminRole.DELIVERY)
   logout(@Res() res: Response) {
     res.setHeader('Set-Cookie', this.adminService.logoutCookie());
     return res.redirect('/api/admin/login');
   }
 
   @Get()
-  @AdminRoles(AdminRole.ADMIN, AdminRole.DELIVERY)
-  async dashboard(@Req() req: Request & { admin?: AdminSession }, @Res() res: Response) {
-    if (req.admin?.role === AdminRole.DELIVERY) return res.redirect('/api/admin/exports/delivery');
+  @Header('Content-Type', 'text/html; charset=utf-8')
+  async dashboard() {
     const [products, orders, stats] = await Promise.all([
       this.adminService.products(),
       this.adminService.orders(),
       this.adminService.financeStats(),
     ]);
-    return res.type('html').send(this.renderDashboard(products.total, orders.length, stats));
+    return this.renderDashboard(products.total, orders.length, stats);
   }
 
   @Get('products')
@@ -221,7 +215,7 @@ export class AdminController {
   @Post('accounts')
   @Redirect('/api/admin/accounts', 302)
   createAccount(@Body() dto: AccountDto) {
-    return this.adminService.createAdminUser(dto.username, dto.password, dto.role);
+    return this.adminService.createAdminUser(dto.username, dto.password);
   }
 
   private renderDashboard(productCount: number, orderCount: number, stats: FinanceStats) {
@@ -377,7 +371,7 @@ export class AdminController {
         (item) => `<tr>
         <td>${item.id}</td>
         <td>${escapeHtml(item.username)}</td>
-        <td>${item.role === AdminRole.ADMIN ? '管理员' : '配送员'}</td>
+        <td>管理员</td>
         <td>${item.status === 1 ? '启用' : '停用'}</td>
         <td>${formatDate(item.lastLoginAt)}</td>
       </tr>`,
@@ -390,10 +384,6 @@ export class AdminController {
         <form class="create" method="post" action="/api/admin/accounts">
           <input name="username" placeholder="账号" required />
           <input name="password" type="password" placeholder="密码，至少 6 位" required />
-          <select name="role">
-            <option value="ADMIN">管理员：全部权限</option>
-            <option value="DELIVERY">配送员：只看配送单</option>
-          </select>
           <button type="submit">新增账号</button>
         </form>
       </section>

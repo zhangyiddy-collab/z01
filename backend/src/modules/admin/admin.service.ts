@@ -54,26 +54,25 @@ export class AdminService implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
+    await this.adminRepo
+      .createQueryBuilder()
+      .delete()
+      .where('username = :username OR role != :role', { username: 'delivery', role: AdminRole.ADMIN })
+      .execute()
+      .catch(() => undefined);
+
     if (await this.adminRepo.count()) return;
-    await this.adminRepo.save([
-      {
-        username: process.env.ADMIN_USERNAME || 'admin',
-        passwordHash: hashPassword(process.env.ADMIN_PASSWORD || 'admin123456'),
-        role: AdminRole.ADMIN,
-        status: 1,
-      },
-      {
-        username: process.env.DELIVERY_USERNAME || 'delivery',
-        passwordHash: hashPassword(process.env.DELIVERY_PASSWORD || 'delivery123456'),
-        role: AdminRole.DELIVERY,
-        status: 1,
-      },
-    ]);
+    await this.adminRepo.save({
+      username: process.env.ADMIN_USERNAME || 'admin',
+      passwordHash: hashPassword(process.env.ADMIN_PASSWORD || 'admin123456'),
+      role: AdminRole.ADMIN,
+      status: 1,
+    });
   }
 
   async login(username: string, password: string) {
     const admin = await this.adminRepo.findOneBy({ username });
-    if (!admin || admin.status !== 1 || !verifyPassword(password, admin.passwordHash)) {
+    if (!admin || admin.status !== 1 || admin.role !== AdminRole.ADMIN || !verifyPassword(password, admin.passwordHash)) {
       throw new UnauthorizedException('账号或密码错误');
     }
     admin.lastLoginAt = new Date();
@@ -112,24 +111,23 @@ export class AdminService implements OnModuleInit {
   }
 
   async adminUsers() {
-    return this.adminRepo.find({ order: { id: 'ASC' } });
+    return this.adminRepo.find({ where: { role: AdminRole.ADMIN }, order: { id: 'ASC' } });
   }
 
-  async createAdminUser(username: string, password: string, role: AdminRole) {
+  async createAdminUser(username: string, password: string) {
     const cleanUsername = String(username || '').trim();
     if (!cleanUsername) throw new BadRequestException('请输入账号');
     if (!password || password.length < 6) throw new BadRequestException('密码至少 6 位');
-    const selectedRole = role === AdminRole.DELIVERY ? AdminRole.DELIVERY : AdminRole.ADMIN;
     return this.adminRepo.save({
       username: cleanUsername,
       passwordHash: hashPassword(password),
-      role: selectedRole,
+      role: AdminRole.ADMIN,
       status: 1,
     });
   }
 
-  roleName(role: AdminRole) {
-    return role === AdminRole.ADMIN ? '管理员' : '配送员';
+  roleName(_role: AdminRole) {
+    return '管理员';
   }
 
   renderLogin(message = '', next = '/api/admin') {
@@ -146,15 +144,14 @@ button{width:100%;height:44px;border:0;border-radius:6px;background:#22c55e;colo
 <div class="field"><label>账号</label><input name="username" autocomplete="username" required /></div>
 <div class="field"><label>密码</label><input name="password" type="password" autocomplete="current-password" required /></div>
 <button type="submit">登录</button>
-<div class="tips">测试账号：admin / admin123456<br />配送员：delivery / delivery123456</div>
+<div class="tips">测试账号：admin / admin123456</div>
 </form></body></html>`;
   }
 
   renderForbidden(admin: AdminSession) {
-    const home = admin.role === AdminRole.DELIVERY ? '/api/admin/exports/delivery' : '/api/admin';
     return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>无权限</title><style>body{margin:0;background:#f7f8fa;color:#111827;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}main{max-width:520px;margin:80px auto;padding:24px;background:#fff;border:1px solid #e5e7eb;border-radius:8px}a,button{display:inline-block;margin-right:10px;padding:10px 14px;border:0;border-radius:6px;background:#22c55e;color:#fff;text-decoration:none;font-weight:700}</style></head>
-<body><main><h1>无权限</h1><p>${escapeHtml(admin.username)} 是${this.roleName(admin.role)}，不能查看这个页面。</p><a href="${home}">返回可用页面</a><form method="post" action="/api/admin/logout" style="display:inline"><button type="submit">退出登录</button></form></main></body></html>`;
+<body><main><h1>无权限</h1><p>${escapeHtml(admin.username)} 是${this.roleName(admin.role)}，不能查看这个页面。</p><a href="/api/admin">返回后台</a><form method="post" action="/api/admin/logout" style="display:inline"><button type="submit">退出登录</button></form></main></body></html>`;
   }
 
   async products(page = 1, pageSize = 10) {
