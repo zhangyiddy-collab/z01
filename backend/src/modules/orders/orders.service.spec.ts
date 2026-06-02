@@ -3,6 +3,7 @@ import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { RedisService } from '../../common/utils/redis.service';
+import { DatabaseBackupService } from '../../database/database-backup.service';
 import { OrderEntity, OrderItemEntity, OrderLogEntity, OrderStatus } from '../../database/entities';
 import { OrdersService } from './orders.service';
 
@@ -57,6 +58,7 @@ async function makeService(lockResult: boolean, dataSource = { transaction: jest
     providers: [
       OrdersService,
       { provide: RedisService, useValue: { lock: jest.fn().mockResolvedValue(lockResult), unlock: jest.fn() } },
+      { provide: DatabaseBackupService, useValue: { snapshot: jest.fn().mockResolvedValue({ ok: true }) } },
       { provide: DataSource, useValue: dataSource },
       { provide: getRepositoryToken(OrderEntity), useValue: { find: jest.fn(), findOneBy: jest.fn() } },
       { provide: getRepositoryToken(OrderItemEntity), useValue: { findBy: jest.fn() } },

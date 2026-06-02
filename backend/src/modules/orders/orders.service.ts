@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, IsNull, Repository } from 'typeorm';
 import { RedisService } from '../../common/utils/redis.service';
+import { DatabaseBackupService } from '../../database/database-backup.service';
 import {
   AddressEntity,
   CartEntity,
@@ -18,6 +19,7 @@ export class OrdersService {
   constructor(
     private readonly dataSource: DataSource,
     private readonly redis: RedisService,
+    private readonly databaseBackup: DatabaseBackupService,
     @InjectRepository(OrderEntity) private readonly orders: Repository<OrderEntity>,
     @InjectRepository(OrderItemEntity) private readonly orderItems: Repository<OrderItemEntity>,
   ) {}
@@ -34,7 +36,7 @@ export class OrdersService {
   }
 
   async removeForUser(userId: string, id: string) {
-    return this.dataSource.transaction(async (manager) => {
+    const result = await this.dataSource.transaction(async (manager) => {
       const order = await manager.findOneBy(OrderEntity, { userId, id, userDeletedAt: IsNull() });
       if (!order) throw new NotFoundException('订单不存在');
 
@@ -55,6 +57,8 @@ export class OrdersService {
       });
       return { ok: true };
     });
+    await this.databaseBackup.snapshot('order-delete');
+    return result;
   }
 
   async create(userId: string, addressId: string, productIds: string[], remark?: string) {
@@ -62,7 +66,7 @@ export class OrdersService {
     if (!(await this.redis.lock(lockKey, 5))) throw new BadRequestException('请勿重复提交');
 
     try {
-      return await this.dataSource.transaction(async (manager) => {
+      const order = await this.dataSource.transaction(async (manager) => {
         const address = await manager.findOneBy(AddressEntity, { id: addressId, userId });
         if (!address) throw new BadRequestException('请选择有效地址');
 
@@ -134,6 +138,8 @@ export class OrdersService {
         const items = await manager.findBy(OrderItemEntity, { orderId: order.id });
         return { ...order, items: items.map((item) => ({ ...item, productCoverUrl: this.absoluteUrl(item.productCoverUrl) })) };
       });
+      await this.databaseBackup.snapshot('order-create');
+      return order;
     } finally {
       await this.redis.unlock(lockKey);
     }
@@ -148,7 +154,7 @@ export class OrdersService {
     if (!(await this.redis.lock(lockKey, 5))) throw new BadRequestException('请勿重复提交');
 
     try {
-      return await this.dataSource.transaction(async (manager) => {
+      const order = await this.dataSource.transaction(async (manager) => {
         const address = await manager.findOneBy(AddressEntity, { id: addressId, userId });
         if (!address) throw new BadRequestException('请选择有效地址');
         if (!checkoutItems.length) throw new BadRequestException('请选择商品');
@@ -204,6 +210,8 @@ export class OrdersService {
         const items = await manager.findBy(OrderItemEntity, { orderId: order.id });
         return { ...order, items: items.map((item) => ({ ...item, productCoverUrl: this.absoluteUrl(item.productCoverUrl) })) };
       });
+      await this.databaseBackup.snapshot('order-direct-checkout');
+      return order;
     } finally {
       await this.redis.unlock(lockKey);
     }

@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { RedisService } from '../../common/utils/redis.service';
+import { DatabaseBackupService } from '../../database/database-backup.service';
 import { OrderEntity, OrderStatus, PaymentEntity, PaymentLogEntity, PaymentStatus } from '../../database/entities';
 
 @Injectable()
@@ -9,6 +10,7 @@ export class PaymentsService {
   constructor(
     private readonly dataSource: DataSource,
     private readonly redis: RedisService,
+    private readonly databaseBackup: DatabaseBackupService,
     @InjectRepository(OrderEntity) private readonly orders: Repository<OrderEntity>,
     @InjectRepository(PaymentEntity) private readonly payments: Repository<PaymentEntity>,
   ) {}
@@ -53,6 +55,7 @@ export class PaymentsService {
     const lockKey = `pay:notify:${outTradeNo}`;
     if (!(await this.redis.lock(lockKey, 30))) return { code: 'SUCCESS', message: 'duplicate' };
 
+    let changed = false;
     try {
       await this.dataSource.transaction(async (manager) => {
         const payment = await manager.findOneBy(PaymentEntity, { outTradeNo });
@@ -75,11 +78,13 @@ export class PaymentsService {
           eventType: 'WECHAT_NOTIFY_SUCCESS',
           payload: { headers, body },
         });
+        changed = true;
       });
     } finally {
       await this.redis.unlock(lockKey);
     }
 
+    if (changed) await this.databaseBackup.snapshot('payment-success');
     return { code: 'SUCCESS', message: '成功' };
   }
 
