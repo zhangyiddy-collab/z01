@@ -17,5 +17,8 @@
     <text>应付金额</text>
     <text class="price">¥{{order.amountText}}</text>
   </view>
-  <view wx:if="{{order.status === 'PENDING_PAYMENT'}}" class="primary-btn" bindtap="pay">微信支付</view>
+  <view class="actions">
+    <view wx:if="{{order.status === 'PENDING_PAYMENT'}}" class="primary-btn action-btn" bindtap="pay">微信支付</view>
+    <view class="delete-btn action-btn" bindtap="remove">删除订单</view>
+  </view>
 </view>

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { Transform } from 'class-transformer';
 import { IsArray, IsOptional, IsString } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -46,6 +46,11 @@ export class OrdersController {
   @Get(':id')
   detail(@CurrentUser() user: CurrentUser, @Param('id') id: string) {
     return this.ordersService.detail(user.id, id);
+  }
+
+  @Delete(':id')
+  remove(@CurrentUser() user: CurrentUser, @Param('id') id: string) {
+    return this.ordersService.removeForUser(user.id, id);
   }
 
   @Post()

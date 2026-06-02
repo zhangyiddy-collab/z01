@@ -246,6 +246,9 @@ export class OrderEntity {
   @Column({ name: 'paid_at', nullable: true })
   paidAt?: Date;
 
+  @Column({ name: 'user_deleted_at', nullable: true })
+  userDeletedAt?: Date;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt!: Date;
 

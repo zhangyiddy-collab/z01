@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, In, Repository } from 'typeorm';
+import { DataSource, In, IsNull, Repository } from 'typeorm';
 import { RedisService } from '../../common/utils/redis.service';
 import {
   AddressEntity,
@@ -23,14 +23,38 @@ export class OrdersService {
   ) {}
 
   list(userId: string) {
-    return this.orders.find({ where: { userId }, order: { id: 'DESC' } });
+    return this.orders.find({ where: { userId, userDeletedAt: IsNull() }, order: { id: 'DESC' } });
   }
 
   async detail(userId: string, id: string) {
-    const order = await this.orders.findOneBy({ userId, id });
+    const order = await this.orders.findOneBy({ userId, id, userDeletedAt: IsNull() });
     if (!order) throw new NotFoundException('订单不存在');
     const items = await this.orderItems.findBy({ orderId: id });
     return { ...order, items: items.map((item) => ({ ...item, productCoverUrl: this.absoluteUrl(item.productCoverUrl) })) };
+  }
+
+  async removeForUser(userId: string, id: string) {
+    return this.dataSource.transaction(async (manager) => {
+      const order = await manager.findOneBy(OrderEntity, { userId, id, userDeletedAt: IsNull() });
+      if (!order) throw new NotFoundException('订单不存在');
+
+      const fromStatus = order.status;
+      if (order.status === OrderStatus.PENDING_PAYMENT) {
+        order.status = OrderStatus.CANCELLED;
+      }
+      order.userDeletedAt = new Date();
+      await manager.save(OrderEntity, order);
+      await manager.save(OrderLogEntity, {
+        orderId: order.id,
+        orderNo: order.orderNo,
+        fromStatus,
+        toStatus: order.status,
+        operatorType: 'USER',
+        operatorId: userId,
+        remark: '用户删除订单记录',
+      });
+      return { ok: true };
+    });
   }
 
   async create(userId: string, addressId: string, productIds: string[], remark?: string) {

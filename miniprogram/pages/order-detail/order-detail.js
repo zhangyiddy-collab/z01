@@ -41,6 +41,20 @@ Page({
           this.load();
         });
       });
+  },
+  remove() {
+    wx.showModal({
+      title: '删除订单',
+      content: '确定删除这个订单记录吗？',
+      confirmColor: '#ef4444',
+      success: (res) => {
+        if (!res.confirm) return;
+        request({ url: `/orders/${this.data.id}`, method: 'DELETE' }).then(() => {
+          wx.showToast({ title: '已删除' });
+          wx.navigateBack({ fail: () => wx.switchTab({ url: '/pages/orders/orders' }) });
+        });
+      }
+    });
   }
 });
 

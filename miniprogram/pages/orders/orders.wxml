@@ -6,6 +6,9 @@
         <text class="status">{{item.statusText}}</text>
       </view>
       <view class="amount">¥{{item.amountText}}</view>
+      <view class="actions">
+        <view class="delete" data-id="{{item.id}}" catchtap="remove">删除</view>
+      </view>
     </view>
   </block>
   <view wx:if="{{orders.length === 0}}" class="empty">暂无订单</view>

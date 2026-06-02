@@ -83,6 +83,7 @@ CREATE TABLE orders (
   paid_amount INT UNSIGNED NOT NULL DEFAULT 0,
   remark VARCHAR(255) NULL,
   paid_at DATETIME NULL,
+  user_deleted_at DATETIME NULL,
   cancelled_at DATETIME NULL,
   completed_at DATETIME NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,

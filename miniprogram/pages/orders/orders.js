@@ -17,6 +17,22 @@ Page({
   },
   open(e) {
     wx.navigateTo({ url: `/pages/order-detail/order-detail?id=${e.currentTarget.dataset.id}` });
+  },
+  remove(e) {
+    const id = e.currentTarget.dataset.id;
+    if (!id) return;
+    wx.showModal({
+      title: '删除订单',
+      content: '确定删除这个订单记录吗？',
+      confirmColor: '#ef4444',
+      success: (res) => {
+        if (!res.confirm) return;
+        request({ url: `/orders/${id}`, method: 'DELETE' }).then(() => {
+          wx.showToast({ title: '已删除' });
+          this.setData({ orders: this.data.orders.filter((item) => String(item.id) !== String(id)) });
+        });
+      }
+    });
   }
 });
 
