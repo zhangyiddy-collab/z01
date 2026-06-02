@@ -1,11 +1,14 @@
-import { Body, Controller, Get, Headers, Header, Param, Patch, Post, Query, Redirect, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { Body, Controller, Get, Header, Headers, Param, Patch, Post, Query, Redirect, Req, Res, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { IsEnum, IsInt, IsOptional, IsString, Min } from 'class-validator';
+import { Request, Response } from 'express';
 import { mkdirSync } from 'fs';
 import { diskStorage } from 'multer';
 import { extname, join } from 'path';
-import { OrderStatus, ProductCategory, ProductStatus } from '../../database/entities';
-import { AdminService } from './admin.service';
+import { AdminRole, OrderStatus, ProductCategory, ProductStatus } from '../../database/entities';
+import { AdminAuthGuard } from './admin-auth.guard';
+import { AdminPublic, AdminRoles } from './admin-auth.decorators';
+import { AdminService, AdminSession, FinanceStats, PeriodMetric } from './admin.service';
 
 class ProductDto {
   @IsString()
@@ -32,19 +35,73 @@ class OrderStatusDto {
   status!: OrderStatus;
 }
 
+class LoginDto {
+  @IsString()
+  username!: string;
+
+  @IsString()
+  password!: string;
+
+  @IsOptional()
+  @IsString()
+  next?: string;
+}
+
+class AccountDto {
+  @IsString()
+  username!: string;
+
+  @IsString()
+  password!: string;
+
+  @IsEnum(AdminRole)
+  role!: AdminRole;
+}
+
+@UseGuards(AdminAuthGuard)
+@AdminRoles(AdminRole.ADMIN)
 @Controller('admin')
 export class AdminController {
   constructor(private readonly adminService: AdminService) {}
 
-  @Get()
+  @Get('login')
+  @AdminPublic()
   @Header('Content-Type', 'text/html; charset=utf-8')
-  async dashboard() {
+  loginPage(@Query('next') next?: string) {
+    return this.adminService.renderLogin('', safeNext(next));
+  }
+
+  @Post('login')
+  @AdminPublic()
+  async login(@Body() dto: LoginDto, @Res() res: Response) {
+    try {
+      const result = await this.adminService.login(dto.username, dto.password);
+      res.setHeader('Set-Cookie', this.adminService.loginCookie(result.token));
+      const target = result.admin.role === AdminRole.DELIVERY ? '/api/admin/exports/delivery' : safeNext(dto.next);
+      return res.redirect(target);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '登录失败';
+      return res.type('html').send(this.adminService.renderLogin(message, safeNext(dto.next)));
+    }
+  }
+
+  @Post('logout')
+  @AdminRoles(AdminRole.ADMIN, AdminRole.DELIVERY)
+  logout(@Res() res: Response) {
+    res.setHeader('Set-Cookie', this.adminService.logoutCookie());
+    return res.redirect('/api/admin/login');
+  }
+
+  @Get()
+  @AdminRoles(AdminRole.ADMIN, AdminRole.DELIVERY)
+  async dashboard(@Req() req: Request & { admin?: AdminSession }, @Res() res: Response) {
+    if (req.admin?.role === AdminRole.DELIVERY) return res.redirect('/api/admin/exports/delivery');
     const [products, orders, stats] = await Promise.all([
       this.adminService.products(),
       this.adminService.orders(),
       this.adminService.financeStats(),
     ]);
-    return this.renderDashboard(products.total, orders, stats);
+    return res.type('html').send(this.renderDashboard(products.total, orders.length, stats));
   }
 
   @Get('products')
@@ -61,24 +118,7 @@ export class AdminController {
 
   @Post('products/create')
   @Redirect('/api/admin/products', 302)
-  @UseInterceptors(
-    FileInterceptor('image', {
-      storage: diskStorage({
-        destination: (_req, _file, cb) => {
-          const dir = join(process.cwd(), 'uploads', 'products');
-          mkdirSync(dir, { recursive: true });
-          cb(null, dir);
-        },
-        filename: (_req, file, cb) => {
-          cb(null, `${Date.now()}-${Math.round(Math.random() * 1e9)}${extname(file.originalname)}`);
-        },
-      }),
-      fileFilter: (_req, file, cb) => {
-        cb(null, file.mimetype.startsWith('image/'));
-      },
-      limits: { fileSize: 5 * 1024 * 1024 },
-    }),
-  )
+  @UseInterceptors(productImageInterceptor())
   createProductFromForm(@Body() body: Record<string, string>, @UploadedFile() file?: Express.Multer.File) {
     const coverUrl = file ? `/uploads/products/${file.filename}` : body.coverUrl || '';
     return this.adminService.createProduct({
@@ -114,27 +154,30 @@ export class AdminController {
 
   @Post('products/:id/image')
   @Redirect('/api/admin/products', 302)
+  @UseInterceptors(productImageInterceptor())
+  updateProductImage(@Param('id') id: string, @UploadedFile() file: Express.Multer.File) {
+    if (!file) return undefined;
+    return this.adminService.updateProductCover(id, `/uploads/products/${file.filename}`);
+  }
+
+  @Post('hot-sale-image')
+  @Redirect('/api/admin/products', 302)
   @UseInterceptors(
     FileInterceptor('image', {
       storage: diskStorage({
         destination: (_req, _file, cb) => {
-          const dir = join(process.cwd(), 'uploads', 'products');
+          const dir = join(process.cwd(), 'uploads', 'hot-sale');
           mkdirSync(dir, { recursive: true });
           cb(null, dir);
         },
-        filename: (_req, file, cb) => {
-          cb(null, `${Date.now()}-${Math.round(Math.random() * 1e9)}${extname(file.originalname)}`);
-        },
+        filename: (_req, file, cb) => cb(null, `hot-sale${extname(file.originalname)}`),
       }),
-      fileFilter: (_req, file, cb) => {
-        cb(null, file.mimetype.startsWith('image/'));
-      },
+      fileFilter: (_req, file, cb) => cb(null, file.mimetype.startsWith('image/')),
       limits: { fileSize: 5 * 1024 * 1024 },
     }),
   )
-  updateProductImage(@Param('id') id: string, @UploadedFile() file: Express.Multer.File) {
-    if (!file) return undefined;
-    return this.adminService.updateProductCover(id, `/uploads/products/${file.filename}`);
+  uploadHotSaleImage(@UploadedFile() file: Express.Multer.File) {
+    return { ok: Boolean(file) };
   }
 
   @Post('products/:id/delete')
@@ -145,9 +188,9 @@ export class AdminController {
 
   @Get('orders')
   async orders(@Query('status') status?: OrderStatus, @Headers('accept') accept?: string, @Query('format') format?: string) {
-    const orders = await this.adminService.orders(status);
-    if (!wantsJson(accept, format)) return this.renderOrders(orders);
-    return orders;
+    const [orders, stats] = await Promise.all([this.adminService.orders(status), this.adminService.financeStats()]);
+    if (!wantsJson(accept, format)) return this.renderOrders(orders, stats);
+    return { items: orders, stats };
   }
 
   @Patch('orders/:id/status')
@@ -168,21 +211,36 @@ export class AdminController {
     return stats;
   }
 
-  private renderDashboard(productCount: number, orders: unknown[], stats: { orderCount: number; paidAmount: number }) {
-    return this.layout('后台总览', `
+  @Get('accounts')
+  @Header('Content-Type', 'text/html; charset=utf-8')
+  async accounts() {
+    const accounts = await this.adminService.adminUsers();
+    return this.renderAccounts(accounts);
+  }
+
+  @Post('accounts')
+  @Redirect('/api/admin/accounts', 302)
+  createAccount(@Body() dto: AccountDto) {
+    return this.adminService.createAdminUser(dto.username, dto.password, dto.role);
+  }
+
+  private renderDashboard(productCount: number, orderCount: number, stats: FinanceStats) {
+    return this.layout(
+      '后台总览',
+      `${this.renderPeriodCards(stats)}
       <section class="stats">
-        <div><strong>${productCount}</strong><span>商品数</span></div>
-        <div><strong>${orders.length}</strong><span>订单数</span></div>
-        <div><strong>¥${money(stats.paidAmount)}</strong><span>已付金额</span></div>
+        <div><strong>${productCount}</strong><span>商品总数</span></div>
+        <div><strong>${orderCount}</strong><span>订单总数</span></div>
+        <div><strong>¥${money(stats.paidAmount)}</strong><span>累计已付金额</span></div>
       </section>
       <section class="grid">
         <a href="/api/admin/products">商品管理</a>
         <a href="/api/admin/orders">订单管理</a>
         <a href="/api/admin/finance/stats">财务统计</a>
-        <a href="/api/admin/exports/purchase.xlsx">采购单 Excel</a>
-        <a href="/api/admin/exports/delivery.pdf">配送单 PDF</a>
-      </section>
-    `);
+        <a href="/api/admin/exports/purchase">采购单打印</a>
+        <a href="/api/admin/exports/delivery">配送单打印</a>
+      </section>`,
+    );
   }
 
   private renderProducts(
@@ -210,7 +268,7 @@ export class AdminController {
             <button type="submit">上传</button>
           </form>
         </td>
-        <td>${item.status}</td>
+        <td>${statusText(item.status)}</td>
         <td>
           <form class="inline" method="post" action="/api/admin/products/${item.id}/status" onsubmit="return confirm('确定${actionText}商品 ${escapeHtml(item.name)} 吗？')">
             <input type="hidden" name="status" value="${nextStatus}" />
@@ -225,14 +283,25 @@ export class AdminController {
       .join('');
     const prevPage = Math.max(1, pagination.page - 1);
     const nextPage = Math.min(pagination.totalPages, pagination.page + 1);
+    const pageLinks = Array.from({ length: pagination.totalPages }, (_, index) => index + 1)
+      .map((page) => `<a class="${page === pagination.page ? 'active' : ''}" href="/api/admin/products?page=${page}">${page}</a>`)
+      .join('');
     const pager = `<div class="pager">
       <a class="${pagination.page <= 1 ? 'disabled' : ''}" href="/api/admin/products?page=${prevPage}">上一页</a>
+      ${pageLinks}
       <span>第 ${pagination.page} / ${pagination.totalPages} 页，共 ${pagination.total} 条，每页 ${pagination.pageSize} 条</span>
       <a class="${pagination.page >= pagination.totalPages ? 'disabled' : ''}" href="/api/admin/products?page=${nextPage}">下一页</a>
     </div>`;
     return this.layout(
       '商品管理',
       `<section class="panel">
+        <h2>热销图片</h2>
+        <form class="create" method="post" action="/api/admin/hot-sale-image" enctype="multipart/form-data">
+          <input type="file" name="image" accept="image/*" required />
+          <button type="submit">上传热销图片</button>
+        </form>
+      </section>
+      <section class="panel">
         <h2>新增商品</h2>
         <form class="create" method="post" action="/api/admin/products/create" enctype="multipart/form-data">
           <input name="name" placeholder="商品名称" required />
@@ -252,7 +321,10 @@ export class AdminController {
     );
   }
 
-  private renderOrders(orders: Array<{ id: string; orderNo: string; status: string; payableAmount: number; paidAmount: number }>) {
+  private renderOrders(
+    orders: Array<{ id: string; orderNo: string; status: string; payableAmount: number; paidAmount: number; createdAt?: Date; paidAt?: Date }>,
+    stats: FinanceStats,
+  ) {
     const rows = orders
       .map((item) => `<tr>
         <td>${item.id}</td>
@@ -260,6 +332,7 @@ export class AdminController {
         <td>${statusText(item.status)}</td>
         <td>¥${money(item.payableAmount)}</td>
         <td>¥${money(item.paidAmount)}</td>
+        <td>${formatDate(item.paidAt || item.createdAt)}</td>
         <td>
           <form class="inline" method="post" action="/api/admin/orders/${item.id}/delete" onsubmit="return confirm('确定删除订单 ${item.orderNo} 吗？删除后不可恢复。')">
             <button class="danger" type="submit">删除</button>
@@ -267,28 +340,107 @@ export class AdminController {
         </td>
       </tr>`)
       .join('');
-    return this.layout('订单管理', `<table><thead><tr><th>ID</th><th>订单号</th><th>状态</th><th>应付</th><th>已付</th><th>操作</th></tr></thead><tbody>${rows}</tbody></table>`);
+    return this.layout(
+      '订单管理',
+      `${this.renderPeriodCards(stats)}
+      <table><thead><tr><th>ID</th><th>订单号</th><th>状态</th><th>应付</th><th>已付</th><th>时间</th><th>操作</th></tr></thead><tbody>${rows}</tbody></table>`,
+    );
   }
 
-  private renderStats(stats: { orderCount: number; paidAmount: number }) {
-    return this.layout('财务统计', `<section class="stats"><div><strong>${stats.orderCount}</strong><span>已付订单</span></div><div><strong>¥${money(stats.paidAmount)}</strong><span>已付金额</span></div></section>`);
+  private renderStats(stats: FinanceStats) {
+    const rows = [
+      ['今日', stats.periods.today],
+      ['本周', stats.periods.week],
+      ['本月', stats.periods.month],
+      ['累计', stats.periods.total],
+    ]
+      .map(
+        ([label, item]) => `<tr>
+        <td>${label}</td>
+        <td>${(item as PeriodMetric).orderCount}</td>
+        <td>${(item as PeriodMetric).paidOrderCount}</td>
+        <td>${(item as PeriodMetric).purchaseItemCount}</td>
+        <td>¥${money((item as PeriodMetric).paidAmount)}</td>
+      </tr>`,
+      )
+      .join('');
+    return this.layout(
+      '财务统计',
+      `${this.renderPeriodCards(stats)}
+      <table><thead><tr><th>周期</th><th>订单数</th><th>已支付订单</th><th>采购件数</th><th>已付金额</th></tr></thead><tbody>${rows}</tbody></table>`,
+    );
+  }
+
+  private renderAccounts(accounts: Array<{ id: string; username: string; role: AdminRole; status: number; lastLoginAt?: Date }>) {
+    const rows = accounts
+      .map(
+        (item) => `<tr>
+        <td>${item.id}</td>
+        <td>${escapeHtml(item.username)}</td>
+        <td>${item.role === AdminRole.ADMIN ? '管理员' : '配送员'}</td>
+        <td>${item.status === 1 ? '启用' : '停用'}</td>
+        <td>${formatDate(item.lastLoginAt)}</td>
+      </tr>`,
+      )
+      .join('');
+    return this.layout(
+      '账号管理',
+      `<section class="panel">
+        <h2>新增后台账号</h2>
+        <form class="create" method="post" action="/api/admin/accounts">
+          <input name="username" placeholder="账号" required />
+          <input name="password" type="password" placeholder="密码，至少 6 位" required />
+          <select name="role">
+            <option value="ADMIN">管理员：全部权限</option>
+            <option value="DELIVERY">配送员：只看配送单</option>
+          </select>
+          <button type="submit">新增账号</button>
+        </form>
+      </section>
+      <table><thead><tr><th>ID</th><th>账号</th><th>级别</th><th>状态</th><th>最后登录</th></tr></thead><tbody>${rows}</tbody></table>`,
+    );
+  }
+
+  private renderPeriodCards(stats: FinanceStats) {
+    const items: Array<[string, PeriodMetric]> = [
+      ['今日', stats.periods.today],
+      ['本周', stats.periods.week],
+      ['本月', stats.periods.month],
+      ['累计', stats.periods.total],
+    ];
+    return `<section class="stats period">
+      ${items
+        .map(
+          ([label, item]) => `<div>
+          <span>${label}</span>
+          <strong>¥${money(item.paidAmount)}</strong>
+          <small>订单 ${item.orderCount} / 已支付 ${item.paidOrderCount} / 采购 ${item.purchaseItemCount} 件</small>
+        </div>`,
+        )
+        .join('')}
+    </section>`;
   }
 
   private layout(title: string, content: string) {
     return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" /><title>${title}</title><style>
       body{margin:0;background:#f7f8fa;color:#111827;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
       main{max-width:1120px;margin:0 auto;padding:28px 18px 48px}
-      nav{display:flex;gap:12px;flex-wrap:wrap;margin:18px 0 22px}
+      nav{display:flex;gap:12px;flex-wrap:wrap;margin:18px 0 22px;align-items:center}
       nav a,.grid a{padding:12px 16px;border:1px solid #dcfce7;border-radius:8px;background:#fff;color:#16a34a;text-decoration:none;font-weight:700}
+      nav form{margin-left:auto}nav button{background:#64748b}
       h1{margin:0;font-size:28px}.muted{color:#64748b}
       .pager{display:flex;gap:12px;align-items:center;justify-content:center;margin:18px 0;flex-wrap:wrap}
       .pager a{padding:9px 14px;border-radius:6px;background:#22c55e;color:#fff;text-decoration:none;font-weight:700}
+      .pager a.active{background:#111827}
       .pager a.disabled{pointer-events:none;background:#cbd5e1;color:#64748b}
       .pager span{color:#475569}
       .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin:18px 0}
-      .stats div{padding:18px;background:#fff;border:1px solid #e5e7eb;border-radius:8px}.stats strong{display:block;font-size:26px;color:#16a34a}.stats span{color:#64748b}
+      .stats div{padding:18px;background:#fff;border:1px solid #e5e7eb;border-radius:8px}
+      .stats strong{display:block;margin:8px 0;font-size:26px;color:#16a34a}
+      .stats span{color:#64748b}.stats small{display:block;color:#64748b;line-height:1.5}
       .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px}
-      table{width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden}th,td{padding:13px;border-bottom:1px solid #e5e7eb;text-align:left;vertical-align:middle}th{background:#f1f5f9}
+      table{width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden}
+      th,td{padding:13px;border-bottom:1px solid #e5e7eb;text-align:left;vertical-align:middle}th{background:#f1f5f9}
       .thumb{width:58px;height:58px;object-fit:cover;border-radius:8px;background:#e5e7eb;margin-right:10px;vertical-align:middle}
       form.inline,form.upload{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0}
       .panel{padding:18px;margin:18px 0;background:#fff;border:1px solid #e5e7eb;border-radius:8px}
@@ -298,14 +450,38 @@ export class AdminController {
       input[type=text],input[name=priceYuan]{width:82px}
       input[type=file]{max-width:180px}
       button{padding:8px 12px;border:0;border-radius:6px;background:#22c55e;color:#fff;font-weight:700;cursor:pointer}
-      button.warning{background:#f59e0b}
-      button.danger{background:#ef4444}
-    </style></head><body><main><h1>${title}</h1><p class="muted">KS同款代购后台测试页</p><nav><a href="/api/admin">总览</a><a href="/api/admin/products">商品</a><a href="/api/admin/orders">订单</a><a href="/api/admin/finance/stats">财务</a></nav>${content}</main></body></html>`;
+      button.warning{background:#f59e0b}button.danger{background:#ef4444}
+    </style></head><body><main><h1>${title}</h1><p class="muted">KS同款代购后台测试页</p><nav><a href="/api/admin">总览</a><a href="/api/admin/products">商品</a><a href="/api/admin/orders">订单</a><a href="/api/admin/finance/stats">财务</a><a href="/api/admin/exports/purchase">采购单</a><a href="/api/admin/exports/delivery">配送单</a><a href="/api/admin/accounts">账号</a><form method="post" action="/api/admin/logout"><button type="submit">退出</button></form></nav>${content}</main></body></html>`;
   }
+}
+
+function productImageInterceptor() {
+  return FileInterceptor('image', {
+    storage: diskStorage({
+      destination: (_req, _file, cb) => {
+        const dir = join(process.cwd(), 'uploads', 'products');
+        mkdirSync(dir, { recursive: true });
+        cb(null, dir);
+      },
+      filename: (_req, file, cb) => cb(null, `${Date.now()}-${Math.round(Math.random() * 1e9)}${extname(file.originalname)}`),
+    }),
+    fileFilter: (_req, file, cb) => cb(null, file.mimetype.startsWith('image/')),
+    limits: { fileSize: 5 * 1024 * 1024 },
+  });
 }
 
 function money(value: number) {
   return (Number(value || 0) / 100).toFixed(2);
+}
+
+function formatDate(value?: Date) {
+  if (!value) return '-';
+  const date = new Date(value);
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function pad(value: number) {
+  return String(value).padStart(2, '0');
 }
 
 function escapeHtml(value: string) {
@@ -317,7 +493,25 @@ function categoryText(category?: string) {
 }
 
 function statusText(status: string) {
-  return ({ PENDING_PAYMENT: '待支付', PAID: '已支付', PURCHASING: '采购中', DELIVERING: '配送中', COMPLETED: '已完成', CANCELLED: '已取消', REFUNDED: '已退款' } as Record<string, string>)[status] || status;
+  return (
+    {
+      PENDING_PAYMENT: '待支付',
+      PAID: '已支付',
+      PURCHASING: '采购中',
+      DELIVERING: '配送中',
+      COMPLETED: '已完成',
+      CANCELLED: '已取消',
+      REFUNDED: '已退款',
+      ON_SALE: '上架',
+      OFF_SALE: '下架',
+    } as Record<string, string>
+  )[status] || status;
+}
+
+function safeNext(next?: string) {
+  if (!next || !next.startsWith('/api/admin')) return '/api/admin';
+  if (next.includes('//')) return '/api/admin';
+  return next;
 }
 
 function wantsJson(accept?: string, format?: string) {

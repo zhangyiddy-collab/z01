@@ -39,6 +39,11 @@ export enum PaymentStatus {
   REFUNDED = 'REFUNDED',
 }
 
+export enum AdminRole {
+  ADMIN = 'ADMIN',
+  DELIVERY = 'DELIVERY',
+}
+
 @Entity('users')
 export class UserEntity {
   @PrimaryGeneratedColumn('increment', { type: 'int', unsigned: true })
@@ -58,6 +63,33 @@ export class UserEntity {
 
   @Column({ type: 'tinyint', default: 1 })
   status!: number;
+
+  @CreateDateColumn({ name: 'created_at' })
+  createdAt!: Date;
+
+  @UpdateDateColumn({ name: 'updated_at' })
+  updatedAt!: Date;
+}
+
+@Entity('admins')
+export class AdminUserEntity {
+  @PrimaryGeneratedColumn('increment', { type: 'int', unsigned: true })
+  id!: string;
+
+  @Column({ length: 64, unique: true })
+  username!: string;
+
+  @Column({ name: 'password_hash', length: 255 })
+  passwordHash!: string;
+
+  @Column({ type: 'simple-enum', enum: AdminRole, default: AdminRole.DELIVERY })
+  role!: AdminRole;
+
+  @Column({ type: 'tinyint', default: 1 })
+  status!: number;
+
+  @Column({ name: 'last_login_at', nullable: true })
+  lastLoginAt?: Date;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt!: Date;
@@ -358,6 +390,7 @@ export class ExceptionLogEntity {
 
 export const entities = [
   UserEntity,
+  AdminUserEntity,
   AddressEntity,
   ProductEntity,
   CartEntity,

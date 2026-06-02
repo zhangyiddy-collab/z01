@@ -19,10 +19,17 @@ Page({
     totalPages: 1,
     loading: false,
     hasPrev: false,
-    hasNext: false
+    hasNext: false,
+    hotImageUrl: ''
   },
   onShow() {
+    this.loadHotImage();
     this.load(1);
+  },
+  loadHotImage() {
+    request({ url: '/products/hot-sale-image' })
+      .then((res) => this.setData({ hotImageUrl: res.imageUrl || '' }))
+      .catch(() => this.setData({ hotImageUrl: '' }));
   },
   onInput(e) {
     this.setData({ keyword: e.detail.value });

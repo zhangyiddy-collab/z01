@@ -28,12 +28,12 @@ export class AppController {
     <p>本地测试 API：<code>http://127.0.0.1:3000/api</code></p>
     <div class="grid">
       <a href="/api/products"><strong>商品列表</strong><span>/api/products</span></a>
-      <a href="/api/admin"><strong>后台总览</strong><span>/api/admin</span></a>
-      <a href="/api/admin/products"><strong>后台商品</strong><span>/api/admin/products</span></a>
-      <a href="/api/admin/orders"><strong>后台订单</strong><span>/api/admin/orders</span></a>
-      <a href="/api/admin/finance/stats"><strong>财务统计</strong><span>/api/admin/finance/stats</span></a>
-      <a href="/api/admin/exports/purchase.xlsx"><strong>采购单 Excel</strong><span>/api/admin/exports/purchase.xlsx</span></a>
-      <a href="/api/admin/exports/delivery.pdf"><strong>配送单 PDF</strong><span>/api/admin/exports/delivery.pdf</span></a>
+      <a href="/api/admin"><strong>后台总览</strong><span>每日 / 每周 / 每月统计</span></a>
+      <a href="/api/admin/products"><strong>后台商品</strong><span>上传、改价、上下架、删除</span></a>
+      <a href="/api/admin/orders"><strong>后台订单</strong><span>订单与已付金额统计</span></a>
+      <a href="/api/admin/finance/stats"><strong>财务统计</strong><span>今日、本周、本月、累计</span></a>
+      <a href="/api/admin/exports/purchase"><strong>采购单打印</strong><span>可查看，可下载 Excel</span></a>
+      <a href="/api/admin/exports/delivery"><strong>配送单打印</strong><span>外卖小票格式</span></a>
     </div>
   </main>
 </body>

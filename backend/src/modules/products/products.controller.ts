@@ -10,6 +10,11 @@ export class ProductsController {
     return this.productsService.list(keyword, category, Number(page || 1), Number(pageSize || 10));
   }
 
+  @Get('hot-sale-image')
+  hotSaleImage() {
+    return this.productsService.hotSaleImage();
+  }
+
   @Get(':id')
   detail(@Param('id') id: string) {
     return this.productsService.detail(id);
