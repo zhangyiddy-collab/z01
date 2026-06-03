@@ -2,6 +2,8 @@ import { BadRequestException, Injectable, OnModuleInit, UnauthorizedException } 
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { pbkdf2Sync, randomBytes, timingSafeEqual } from 'crypto';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
+import { join } from 'path';
 import { DataSource, Repository } from 'typeorm';
 import {
   AdminRole,
@@ -158,17 +160,70 @@ button{width:100%;height:44px;border:0;border-radius:6px;background:#22c55e;colo
     const safePage = Math.max(1, Number(page) || 1);
     const safePageSize = Math.min(50, Math.max(1, Number(pageSize) || 10));
     const [items, total] = await this.productRepo.findAndCount({
-      order: { id: 'DESC' },
+      order: productListOrder(),
       skip: (safePage - 1) * safePageSize,
       take: safePageSize,
     });
     return {
-      items,
+      items: items.map((item, index) => ({
+        ...item,
+        displayId: (safePage - 1) * safePageSize + index + 1,
+      })),
       total,
       page: safePage,
       pageSize: safePageSize,
       totalPages: Math.max(1, Math.ceil(total / safePageSize)),
     };
+  }
+
+  async hotSaleSettings() {
+    try {
+      const path = hotSaleConfigPath();
+      if (!existsSync(path)) return { productId: '', productNo: '' };
+      const config = JSON.parse(readFileSync(path, 'utf8')) as { productId?: string };
+      const productId = String(config.productId || '');
+      return { productId, productNo: productId ? await this.productDisplayId(productId) : '' };
+    } catch {
+      return { productId: '', productNo: '' };
+    }
+  }
+
+  async updateHotSaleSettings(productNoOrId?: string) {
+    const selectedText = String(productNoOrId || '').trim();
+    let selectedProductId = '';
+    if (selectedText) {
+      const product = (await this.productByDisplayId(selectedText)) || (await this.productRepo.findOneBy({ id: selectedText }));
+      if (!product) throw new BadRequestException('热销关联商品不存在');
+      selectedProductId = String(product.id);
+    }
+
+    const dir = join(process.cwd(), 'uploads', 'hot-sale');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(hotSaleConfigPath(), JSON.stringify({ productId: selectedProductId }, null, 2), 'utf8');
+    return { ok: true, productId: selectedProductId, productNo: selectedProductId ? await this.productDisplayId(selectedProductId) : '' };
+  }
+
+  async hotSaleProduct(productId?: string) {
+    const selectedProductId = String(productId || '').trim();
+    if (!selectedProductId) return null;
+    return this.productRepo.findOneBy({ id: selectedProductId });
+  }
+
+  private async productByDisplayId(displayId: string) {
+    const position = Number(displayId);
+    if (!Number.isInteger(position) || position < 1) return null;
+    const items = await this.productRepo.find({
+      order: productListOrder(),
+      skip: position - 1,
+      take: 1,
+    });
+    return items[0] || null;
+  }
+
+  private async productDisplayId(productId: string) {
+    const products = await this.productRepo.find({ select: { id: true }, order: productListOrder() });
+    const index = products.findIndex((product) => String(product.id) === String(productId));
+    return index >= 0 ? String(index + 1) : '';
   }
 
   createProduct(dto: Partial<ProductEntity>) {
@@ -265,6 +320,10 @@ button{width:100%;height:44px;border:0;border-radius:6px;background:#22c55e;colo
   }
 }
 
+function productListOrder() {
+  return { sort: 'DESC' as const, id: 'ASC' as const };
+}
+
 function hashPassword(password: string) {
   const salt = randomBytes(16).toString('hex');
   const iterations = 120000;
@@ -307,4 +366,8 @@ function isAfter(value: Date | string | undefined, start: Date) {
 
 function escapeHtml(value: string) {
   return String(value).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char] || char);
+}
+
+function hotSaleConfigPath() {
+  return join(process.cwd(), 'uploads', 'hot-sale', 'config.json');
 }

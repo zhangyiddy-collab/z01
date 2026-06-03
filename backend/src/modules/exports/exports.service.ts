@@ -6,7 +6,7 @@ import PDFDocument = require('pdfkit');
 import { Repository } from 'typeorm';
 import { AddressEntity, OrderEntity, OrderItemEntity, OrderStatus } from '../../database/entities';
 
-export type PeriodKey = 'today' | 'week' | 'month' | 'total';
+export type PeriodKey = 'today' | 'week' | 'month';
 
 export interface PurchaseRow {
   productName: string;
@@ -32,6 +32,14 @@ export interface DeliveryTicket {
   itemCount: number;
 }
 
+export interface DeliveryGroup {
+  addressKey: string;
+  address?: AddressEntity;
+  tickets: DeliveryTicket[];
+  orderCount: number;
+  itemCount: number;
+}
+
 const PAID_STATUSES = [OrderStatus.PAID, OrderStatus.PURCHASING, OrderStatus.DELIVERING, OrderStatus.COMPLETED];
 const DELIVERY_STATUSES = [OrderStatus.PAID, OrderStatus.PURCHASING, OrderStatus.DELIVERING];
 
@@ -51,16 +59,15 @@ export class ExportsService {
       this.purchasePeriod('today', '今日采购单', paidOrders, ranges.today),
       this.purchasePeriod('week', '本周采购单', paidOrders, ranges.week),
       this.purchasePeriod('month', '本月采购单', paidOrders, ranges.month),
-      this.purchasePeriod('total', '累计采购单', paidOrders),
     ]);
   }
 
-  async purchaseRows(period: PeriodKey = 'total'): Promise<PurchaseRow[]> {
+  async purchaseRows(period: PeriodKey = 'month'): Promise<PurchaseRow[]> {
     const selected = (await this.purchasePeriods()).find((item) => item.key === period);
     return selected?.rows || [];
   }
 
-  async purchaseExcel(period: PeriodKey = 'total') {
+  async purchaseExcel(period: PeriodKey = 'month') {
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet('Purchase');
     sheet.columns = [
@@ -102,25 +109,47 @@ export class ExportsService {
         itemCount: items.reduce((sum, item) => sum + Number(item.quantity || 0), 0),
       });
     }
-    return tickets;
+    return tickets.sort(compareDeliveryTickets);
+  }
+
+  async deliveryGroups(): Promise<DeliveryGroup[]> {
+    const tickets = await this.deliveryTickets();
+    const groups = new Map<string, DeliveryGroup>();
+    for (const ticket of tickets) {
+      const key = deliveryAddressKey(ticket.address);
+      const group =
+        groups.get(key) ||
+        ({
+          addressKey: key,
+          address: ticket.address,
+          tickets: [],
+          orderCount: 0,
+          itemCount: 0,
+        } satisfies DeliveryGroup);
+      group.tickets.push(ticket);
+      group.orderCount += 1;
+      group.itemCount += ticket.itemCount;
+      groups.set(key, group);
+    }
+    return [...groups.values()].sort((a, b) => a.addressKey.localeCompare(b.addressKey, 'zh-CN'));
   }
 
   async deliveryPdf(): Promise<Buffer> {
-    const tickets = await this.deliveryTickets();
+    const groups = await this.deliveryGroups();
     const doc = new PDFDocument({ size: [226, 640], margin: 12 });
     this.tryUseChineseFont(doc);
     const chunks: Buffer[] = [];
     doc.on('data', (chunk: Buffer) => chunks.push(chunk));
     const done = new Promise<Buffer>((resolve) => doc.on('end', () => resolve(Buffer.concat(chunks))));
 
-    if (!tickets.length) {
+    if (!groups.length) {
       doc.fontSize(14).text('KS同款代购配送单', { align: 'center' });
       doc.moveDown().fontSize(10).text('暂无可配送订单', { align: 'center' });
     }
 
-    tickets.forEach((ticket, index) => {
+    groups.forEach((group, index) => {
       if (index > 0) doc.addPage({ size: [226, 640], margin: 12 });
-      this.renderDeliveryTicket(doc, ticket);
+      this.renderDeliveryGroup(doc, group);
     });
     doc.end();
     return done;
@@ -163,24 +192,27 @@ export class ExportsService {
     return [...map.values()].sort((a, b) => b.quantity - a.quantity || a.productName.localeCompare(b.productName));
   }
 
-  private renderDeliveryTicket(doc: PDFKit.PDFDocument, ticket: DeliveryTicket) {
-    const { order, address, items } = ticket;
+  private renderDeliveryGroup(doc: PDFKit.PDFDocument, group: DeliveryGroup) {
+    const { address, tickets } = group;
     doc.fontSize(14).text('KS同款代购', { align: 'center' });
-    doc.fontSize(11).text('外卖配送单', { align: 'center' });
+    doc.fontSize(11).text('同址配送单', { align: 'center' });
     this.hr(doc);
-    doc.fontSize(9).text(`订单号: ${order.orderNo}`);
-    doc.text(`状态: ${statusText(order.status)}  件数: ${ticket.itemCount}`);
-    doc.text(`时间: ${formatDate(order.paidAt || order.createdAt)}`);
+    doc.fontSize(11).text(addressText(address));
+    doc.fontSize(9).text(`订单: ${group.orderCount} 单  件数: ${group.itemCount}`);
     this.hr(doc);
-    doc.fontSize(11).text(`${address?.name || '-'}  ${address?.phone || ''}`);
-    doc.fontSize(10).text(addressText(address));
-    this.hr(doc);
-    items.forEach((item) => {
-      doc.fontSize(10).text(`${item.productName}`);
-      doc.text(`  x${item.quantity}`);
+    tickets.forEach((ticket, index) => {
+      const { order, items } = ticket;
+      if (index > 0) this.hr(doc);
+      doc.fontSize(9).text(`订单号: ${order.orderNo}`);
+      doc.text(`状态: ${statusText(order.status)}  时间: ${formatDate(order.paidAt || order.createdAt)}`);
+      doc.fontSize(10).text(`${ticket.address?.name || '-'}  ${ticket.address?.phone || ''}`);
+      items.forEach((item) => {
+        doc.fontSize(10).text(`${item.productName}`);
+        doc.text(`  x${item.quantity}`);
+      });
+      if (order.remark) doc.moveDown(0.5).fontSize(10).text(`备注: ${order.remark}`);
     });
     this.hr(doc);
-    if (order.remark) doc.moveDown(0.5).fontSize(10).text(`备注: ${order.remark}`);
     doc.moveDown().fontSize(8).text('请核对商品后配送', { align: 'center' });
   }
 
@@ -234,6 +266,34 @@ function pad(value: number) {
 export function addressText(address?: AddressEntity) {
   if (!address) return '地址缺失';
   return `${address.communityName || ''}${address.buildingNo}栋 ${address.unitNo}单元 ${address.roomNo}`;
+}
+
+function compareDeliveryTickets(a: DeliveryTicket, b: DeliveryTicket) {
+  const addressCompare = deliveryAddressKey(a.address).localeCompare(deliveryAddressKey(b.address), 'zh-CN');
+  if (addressCompare !== 0) return addressCompare;
+
+  const timeCompare = deliveryOrderTime(b.order) - deliveryOrderTime(a.order);
+  if (timeCompare !== 0) return timeCompare;
+
+  return Number(b.order.id || 0) - Number(a.order.id || 0);
+}
+
+function deliveryAddressKey(address?: AddressEntity) {
+  if (!address) return '~~~~missing-address';
+  return [
+    normalizeAddressPart(address.communityName),
+    normalizeAddressPart(address.buildingNo),
+    normalizeAddressPart(address.unitNo),
+    normalizeAddressPart(address.roomNo),
+  ].join('|');
+}
+
+function normalizeAddressPart(value?: string) {
+  return String(value || '').trim().replace(/\s+/g, '').toLowerCase();
+}
+
+function deliveryOrderTime(order: OrderEntity) {
+  return new Date(order.paidAt || order.createdAt || 0).getTime() || 0;
 }
 
 export function statusText(status: string) {

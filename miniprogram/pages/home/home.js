@@ -20,16 +20,33 @@ Page({
     loading: false,
     hasPrev: false,
     hasNext: false,
-    hotImageUrl: ''
+    hotImageUrl: '',
+    hotProductId: '',
+    hotProductName: '',
+    hotProductDesc: '',
+    hotProductPriceText: ''
   },
   onShow() {
     this.loadHotImage();
     this.load(1);
   },
   loadHotImage() {
-    request({ url: '/products/hot-sale-image' })
-      .then((res) => this.setData({ hotImageUrl: res.imageUrl || '' }))
-      .catch(() => this.setData({ hotImageUrl: '' }));
+    request({ url: '/products/hot-sale' })
+      .then((res) => {
+        const product = res.product || {};
+        this.setData({
+          hotImageUrl: res.imageUrl || product.coverUrl || '',
+          hotProductId: res.productId ? String(res.productId) : '',
+          hotProductName: product.name || '',
+          hotProductDesc: product.subtitle || '',
+          hotProductPriceText: product.price ? yuan(product.price) : ''
+        });
+      })
+      .catch(() => this.setData({ hotImageUrl: '', hotProductId: '', hotProductName: '', hotProductDesc: '', hotProductPriceText: '' }));
+  },
+  openHotSale() {
+    if (!this.data.hotProductId) return wx.showToast({ title: '请先设置热销商品', icon: 'none' });
+    wx.navigateTo({ url: `/pages/product/product?id=${this.data.hotProductId}` });
   },
   onInput(e) {
     this.setData({ keyword: e.detail.value });

@@ -16,7 +16,7 @@ function request(options) {
         },
         success(res) {
           if (res.statusCode >= 200 && res.statusCode < 300) {
-            resolve(res.data);
+            resolve(normalizeResponseUrls(res.data, baseUrl));
           } else if (res.statusCode === 401 && options.url !== '/auth/wechat-login') {
             getApp().login()
               .then(() => request(options).then(resolve).catch(reject))
@@ -38,6 +38,22 @@ function request(options) {
     };
     send(0);
   });
+}
+
+function normalizeResponseUrls(value, baseUrl) {
+  const apiRoot = baseUrl.replace(/\/api\/?$/, '');
+  if (Array.isArray(value)) return value.map((item) => normalizeResponseUrls(item, baseUrl));
+  if (value && typeof value === 'object') {
+    return Object.keys(value).reduce((result, key) => {
+      result[key] = normalizeResponseUrls(value[key], baseUrl);
+      return result;
+    }, {});
+  }
+  if (typeof value !== 'string') return value;
+  if (value.indexOf('/uploads/') === 0) return `${apiRoot}${value}`;
+  return value
+    .replace(/^http:\/\/127\.0\.0\.1:3000/, apiRoot)
+    .replace(/^http:\/\/localhost:3000/, apiRoot);
 }
 
 module.exports = { request };

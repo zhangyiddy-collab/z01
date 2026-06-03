@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { existsSync, readdirSync, statSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { Like, Repository } from 'typeorm';
 import { ProductCategory, ProductEntity, ProductStatus } from '../../database/entities';
@@ -43,14 +43,19 @@ export class ProductsService {
     return this.withAbsoluteImage(product);
   }
 
-  hotSaleImage() {
-    const dir = join(process.cwd(), 'uploads', 'hot-sale');
-    if (!existsSync(dir)) return { imageUrl: '' };
-    const file = readdirSync(dir)
-      .filter((name) => /^hot-sale\./.test(name))
-      .map((name) => ({ name, mtime: statSync(join(dir, name)).mtimeMs }))
-      .sort((a, b) => b.mtime - a.mtime)[0];
-    return { imageUrl: file ? this.absoluteUrl(`/uploads/hot-sale/${file.name}`) : '' };
+  async hotSaleImage() {
+    const configuredProductId = this.hotSaleProductId();
+    const product = configuredProductId
+      ? await this.products.findOneBy({ id: configuredProductId, status: ProductStatus.ON_SALE })
+      : null;
+    if (!product) return { imageUrl: '', productId: '' };
+
+    const hotProduct = this.withAbsoluteImage(product);
+    return {
+      imageUrl: hotProduct.coverUrl || '',
+      productId: String(hotProduct.id),
+      product: hotProduct,
+    };
   }
 
   private withAbsoluteImage(product: ProductEntity) {
@@ -66,5 +71,16 @@ export class ProductsService {
     if (/^https?:\/\//i.test(url)) return url;
     const baseUrl = process.env.PUBLIC_BASE_URL || 'http://127.0.0.1:3000';
     return `${baseUrl}${url.startsWith('/') ? url : `/${url}`}`;
+  }
+
+  private hotSaleProductId() {
+    try {
+      const path = join(process.cwd(), 'uploads', 'hot-sale', 'config.json');
+      if (!existsSync(path)) return '';
+      const config = JSON.parse(readFileSync(path, 'utf8')) as { productId?: string };
+      return String(config.productId || '');
+    } catch {
+      return '';
+    }
   }
 }

@@ -66,6 +66,7 @@ export class OrdersService {
     if (!(await this.redis.lock(lockKey, 5))) throw new BadRequestException('请勿重复提交');
 
     try {
+      const orderRemark = this.normalizeRemark(remark);
       const order = await this.dataSource.transaction(async (manager) => {
         const address = await manager.findOneBy(AddressEntity, { id: addressId, userId });
         if (!address) throw new BadRequestException('请选择有效地址');
@@ -91,7 +92,7 @@ export class OrdersService {
           productAmount: 0,
           deliveryFee: 0,
           payableAmount: 0,
-          remark,
+          remark: orderRemark,
         });
 
         for (const item of checkoutItems) {
@@ -145,15 +146,22 @@ export class OrdersService {
     }
   }
 
-  async directCheckout(userId: string, addressId: string, productId: string) {
-    return this.createFromItems(userId, addressId, [{ productId, quantity: 1 }], '直接结算');
+  async directCheckout(userId: string, addressId: string, productId: string, quantity = 1, remark?: string) {
+    return this.createFromItems(userId, addressId, [{ productId, quantity: Math.max(1, Number(quantity) || 1) }], remark, '直接结算');
   }
 
-  private async createFromItems(userId: string, addressId: string, checkoutItems: Array<{ productId: string; quantity: number }>, remark?: string) {
+  private async createFromItems(
+    userId: string,
+    addressId: string,
+    checkoutItems: Array<{ productId: string; quantity: number }>,
+    remark?: string,
+    logRemark = '用户提交订单',
+  ) {
     const lockKey = `order:direct:${userId}`;
     if (!(await this.redis.lock(lockKey, 5))) throw new BadRequestException('请勿重复提交');
 
     try {
+      const orderRemark = this.normalizeRemark(remark);
       const order = await this.dataSource.transaction(async (manager) => {
         const address = await manager.findOneBy(AddressEntity, { id: addressId, userId });
         if (!address) throw new BadRequestException('请选择有效地址');
@@ -171,7 +179,7 @@ export class OrdersService {
           productAmount: 0,
           deliveryFee: 0,
           payableAmount: 0,
-          remark,
+          remark: orderRemark,
         });
 
         for (const item of checkoutItems) {
@@ -205,7 +213,7 @@ export class OrdersService {
           toStatus: OrderStatus.PENDING_PAYMENT,
           operatorType: 'USER',
           operatorId: userId,
-          remark: remark || '用户提交订单',
+          remark: logRemark,
         });
         const items = await manager.findBy(OrderItemEntity, { orderId: order.id });
         return { ...order, items: items.map((item) => ({ ...item, productCoverUrl: this.absoluteUrl(item.productCoverUrl) })) };
@@ -220,6 +228,11 @@ export class OrdersService {
   private generateOrderNo() {
     const time = new Date().toISOString().replace(/\D/g, '').slice(0, 14);
     return `${time}${Math.floor(100000 + Math.random() * 900000)}`;
+  }
+
+  private normalizeRemark(remark?: string) {
+    const text = String(remark || '').trim();
+    return text ? text.slice(0, 255) : undefined;
   }
 
   private absoluteUrl(url: string) {

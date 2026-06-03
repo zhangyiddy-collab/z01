@@ -8,5 +8,11 @@
   </view>
   <view wx:if="{{!logged}}" class="primary-btn" bindtap="login">微信登录</view>
   <view class="menu" bindtap="addresses">地址管理</view>
+  <button
+    class="menu contact-menu"
+    open-type="contact"
+    show-message-card="true"
+    send-message-title="KS同款代购咨询"
+    send-message-path="/pages/profile/profile"
+  >联系客服</button>
 </view>
-

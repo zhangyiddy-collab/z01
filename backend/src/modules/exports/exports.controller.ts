@@ -18,7 +18,7 @@ export class ExportsController {
     return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>采购单</title>${purchaseStyle()}</head><body><main>
 <div class="toolbar no-print">
-  <div><h1>采购单</h1><p>今日 / 本周 / 本月 / 累计统计，表格可直接打印。</p></div>
+  <div><h1>采购单</h1><p>今日 / 本周 / 本月统计，表格可直接打印。</p></div>
   <div class="actions"><button onclick="window.print()">打印</button><a href="/api/admin">返回后台</a></div>
 </div>
 ${periods.map((period) => renderPurchaseSection(period)).join('')}
@@ -33,7 +33,7 @@ ${periods.map((period) => renderPurchaseSection(period)).join('')}
 
   @Get('purchase.download.xlsx')
   async purchaseExcel(@Res() res: Response, @Query('period') period?: PeriodKey) {
-    const selected = ['today', 'week', 'month', 'total'].includes(String(period)) ? period : 'total';
+    const selected = ['today', 'week', 'month'].includes(String(period)) ? period : 'month';
     const buffer = await this.exportsService.purchaseExcel(selected as PeriodKey);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename=purchase-${selected}.xlsx`);
@@ -43,31 +43,36 @@ ${periods.map((period) => renderPurchaseSection(period)).join('')}
   @Get('delivery')
   @Header('Content-Type', 'text/html; charset=utf-8')
   async deliveryHtml() {
-    const tickets = await this.exportsService.deliveryTickets();
-    const body = tickets.length
-      ? tickets
+    const groups = await this.exportsService.deliveryGroups();
+    const body = groups.length
+      ? groups
           .map(
-            (ticket) => `<section class="ticket">
+            (group) => `<section class="ticket">
       <h2>KS同款代购</h2>
-      <h3>外卖配送单</h3>
+      <h3>同址配送单</h3>
       <div class="line"></div>
-      <p><b>订单号</b> ${escapeHtml(ticket.order.orderNo)}</p>
-      <p><b>状态</b> ${statusText(ticket.order.status)}　<b>件数</b> ${ticket.itemCount}</p>
-      <p><b>时间</b> ${formatDate(ticket.order.paidAt || ticket.order.createdAt)}</p>
+      <p class="address">${escapeHtml(addressText(group.address))}</p>
+      <p><b>订单</b> ${group.orderCount} 单　<b>件数</b> ${group.itemCount}</p>
       <div class="line"></div>
-      <p class="customer">${escapeHtml(ticket.address?.name || '-')} ${escapeHtml(ticket.address?.phone || '')}</p>
-      <p>${escapeHtml(addressText(ticket.address))}</p>
-      <div class="line"></div>
-      ${ticket.items
+      ${group.tickets
         .map(
-          (item) => `<div class="item">
+          (ticket, index) => `<div class="order-block">
+        ${index > 0 ? '<div class="thin-line"></div>' : ''}
+        <p><b>订单号</b> ${escapeHtml(ticket.order.orderNo)}</p>
+        <p><b>状态</b> ${statusText(ticket.order.status)}　<b>时间</b> ${formatDate(ticket.order.paidAt || ticket.order.createdAt)}</p>
+        <p class="customer">${escapeHtml(ticket.address?.name || '-')} ${escapeHtml(ticket.address?.phone || '')}</p>
+        ${ticket.items
+          .map(
+            (item) => `<div class="item">
         <span>${escapeHtml(item.productName)}</span>
         <b>x${item.quantity}</b>
       </div>`,
+          )
+          .join('')}
+        ${ticket.order.remark ? `<p><b>备注</b> ${escapeHtml(ticket.order.remark)}</p>` : ''}
+      </div>`,
         )
         .join('')}
-      <div class="line"></div>
-      ${ticket.order.remark ? `<p><b>备注</b> ${escapeHtml(ticket.order.remark)}</p>` : ''}
       <p class="foot">请核对商品后配送</p>
     </section>`,
           )
@@ -75,7 +80,7 @@ ${periods.map((period) => renderPurchaseSection(period)).join('')}
       : '<section class="ticket"><h2>KS同款代购</h2><p class="empty">暂无可配送订单</p></section>';
     return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>配送单</title>${deliveryStyle()}</head><body>
-<div class="toolbar no-print"><h1>配送单</h1><div><button onclick="window.print()">打印</button><a href="/api/admin/exports/delivery.pdf">下载 PDF</a><form method="post" action="/api/admin/logout"><button type="submit">退出登录</button></form></div></div>
+<div class="toolbar no-print"><div><h1>配送单</h1><p>同一住址已合并到同一张配送单</p></div><div class="actions"><button onclick="window.print()">打印</button><a href="/api/admin/exports/delivery.pdf">下载 PDF</a><form method="post" action="/api/admin/logout"><button type="submit">退出登录</button></form></div></div>
 <main>${body}</main></body></html>`;
   }
 
@@ -132,10 +137,10 @@ function deliveryStyle() {
   return `<style>
 body{margin:0;background:#f7f8fa;color:#111827;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
 .toolbar{display:flex;justify-content:space-between;gap:12px;align-items:center;max-width:860px;margin:0 auto;padding:20px 18px;flex-wrap:wrap}
-.toolbar h1{margin:0}.toolbar div{display:flex;gap:10px;flex-wrap:wrap}a,button{padding:10px 14px;border:0;border-radius:6px;background:#22c55e;color:#fff;text-decoration:none;font-weight:700}
+.toolbar h1{margin:0}.toolbar p{margin:6px 0 0;color:#64748b}.toolbar .actions{display:flex;gap:10px;flex-wrap:wrap}a,button{padding:10px 14px;border:0;border-radius:6px;background:#22c55e;color:#fff;text-decoration:none;font-weight:700}
 main{display:flex;flex-wrap:wrap;gap:16px;justify-content:center;padding:0 18px 48px}.ticket{width:80mm;min-height:140mm;padding:14px;background:#fff;border:1px solid #d1d5db;color:#111;box-sizing:border-box;break-inside:avoid}
-.ticket h2,.ticket h3{text-align:center;margin:0}.ticket h2{font-size:18px}.ticket h3{font-size:14px;margin-top:4px}.ticket p{margin:6px 0;font-size:13px}.customer{font-size:16px!important;font-weight:800}
-.line{border-top:1px dashed #111;margin:10px 0}.item{display:grid;grid-template-columns:1fr auto;gap:8px;margin:7px 0;font-size:13px}.foot{text-align:center;color:#64748b}.empty{text-align:center;padding:40px 0}
+.ticket h2,.ticket h3{text-align:center;margin:0}.ticket h2{font-size:18px}.ticket h3{font-size:14px;margin-top:4px}.ticket p{margin:6px 0;font-size:13px}.address{font-size:16px!important;font-weight:900}.customer{font-size:15px!important;font-weight:800}
+.line{border-top:1px dashed #111;margin:10px 0}.thin-line{border-top:1px dotted #64748b;margin:10px 0}.order-block{break-inside:avoid}.item{display:grid;grid-template-columns:1fr auto;gap:8px;margin:7px 0;font-size:13px}.foot{text-align:center;color:#64748b}.empty{text-align:center;padding:40px 0}
 @media print{body{background:#fff}.no-print{display:none!important}main{display:block;padding:0}.ticket{width:80mm;border:0;margin:0 auto 8mm;page-break-after:always}}
 </style>`;
 }

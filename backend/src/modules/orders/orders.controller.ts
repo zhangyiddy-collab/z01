@@ -1,6 +1,6 @@
 import { Body, Controller, Delete, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { Transform } from 'class-transformer';
-import { IsArray, IsOptional, IsString } from 'class-validator';
+import { IsArray, IsInt, IsOptional, IsString, Min } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { PaymentsService } from '../payments/payments.service';
@@ -28,6 +28,15 @@ class DirectCheckoutDto {
   @Transform(({ value }) => String(value || ''))
   @IsString()
   productId!: string;
+
+  @Transform(({ value }) => Math.max(1, Number(value) || 1))
+  @IsInt()
+  @Min(1)
+  quantity!: number;
+
+  @IsOptional()
+  @IsString()
+  remark?: string;
 }
 
 @Controller('orders')
@@ -67,7 +76,7 @@ export class OrdersController {
 
   @Post('direct-checkout')
   async directCheckout(@CurrentUser() user: CurrentUser, @Body() dto: DirectCheckoutDto) {
-    const order = await this.ordersService.directCheckout(user.id, dto.addressId, dto.productId);
+    const order = await this.ordersService.directCheckout(user.id, dto.addressId, dto.productId, dto.quantity, dto.remark);
     await this.paymentsService.mockSuccess(user.id, order.id);
     return this.ordersService.detail(user.id, order.id);
   }

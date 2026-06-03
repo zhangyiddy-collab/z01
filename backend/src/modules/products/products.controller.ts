@@ -10,8 +10,13 @@ export class ProductsController {
     return this.productsService.list(keyword, category, Number(page || 1), Number(pageSize || 10));
   }
 
+  @Get('hot-sale')
+  hotSale() {
+    return this.productsService.hotSaleImage();
+  }
+
   @Get('hot-sale-image')
-  hotSaleImage() {
+  hotSaleImageLegacy() {
     return this.productsService.hotSaleImage();
   }
 

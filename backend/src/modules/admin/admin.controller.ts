@@ -101,8 +101,10 @@ export class AdminController {
   @Get('products')
   async products(@Headers('accept') accept?: string, @Query('format') format?: string, @Query('page') page?: string) {
     const products = await this.adminService.products(Number(page || 1), 10);
-    if (!wantsJson(accept, format)) return this.renderProducts(products.items, products);
-    return products;
+    const hotSale = await this.adminService.hotSaleSettings();
+    const hotSaleProduct = await this.adminService.hotSaleProduct(hotSale.productId);
+    if (!wantsJson(accept, format)) return this.renderProducts(products.items, products, hotSale, hotSaleProduct);
+    return { ...products, hotSale, hotSaleProduct };
   }
 
   @Post('products')
@@ -154,24 +156,10 @@ export class AdminController {
     return this.adminService.updateProductCover(id, `/uploads/products/${file.filename}`);
   }
 
-  @Post('hot-sale-image')
+  @Post('hot-sale')
   @Redirect('/api/admin/products', 302)
-  @UseInterceptors(
-    FileInterceptor('image', {
-      storage: diskStorage({
-        destination: (_req, _file, cb) => {
-          const dir = join(process.cwd(), 'uploads', 'hot-sale');
-          mkdirSync(dir, { recursive: true });
-          cb(null, dir);
-        },
-        filename: (_req, file, cb) => cb(null, `hot-sale${extname(file.originalname)}`),
-      }),
-      fileFilter: (_req, file, cb) => cb(null, file.mimetype.startsWith('image/')),
-      limits: { fileSize: 5 * 1024 * 1024 },
-    }),
-  )
-  uploadHotSaleImage(@UploadedFile() file: Express.Multer.File) {
-    return { ok: Boolean(file) };
+  updateHotSale(@Body() body: Record<string, string>) {
+    return this.adminService.updateHotSaleSettings(body.productNo || body.productId);
   }
 
   @Post('products/:id/delete')
@@ -238,8 +226,10 @@ export class AdminController {
   }
 
   private renderProducts(
-    products: Array<{ id: string; name: string; subtitle?: string; category?: string; coverUrl?: string; price: number; status: string }>,
+    products: Array<{ id: string; displayId?: number; name: string; subtitle?: string; category?: string; coverUrl?: string; price: number; status: string }>,
     pagination: { total: number; page: number; pageSize: number; totalPages: number },
+    hotSale: { productId: string; productNo?: string },
+    hotSaleProduct: { id: string; name: string; subtitle?: string; category?: string; coverUrl?: string; price: number; status: string } | null,
   ) {
     const rows = products
       .map((item) => {
@@ -247,7 +237,7 @@ export class AdminController {
         const actionText = item.status === ProductStatus.ON_SALE ? '下架' : '上架';
         const actionClass = item.status === ProductStatus.ON_SALE ? 'warning' : '';
         return `<tr>
-        <td>${item.id}</td>
+        <td>${item.displayId || ''}</td>
         <td><img class="thumb" src="${item.coverUrl || ''}" /><div>${escapeHtml(item.name)}</div></td>
         <td>${categoryText(item.category)}</td>
         <td>
@@ -289,11 +279,23 @@ export class AdminController {
     return this.layout(
       '商品管理',
       `<section class="panel">
-        <h2>热销图片</h2>
-        <form class="create" method="post" action="/api/admin/hot-sale-image" enctype="multipart/form-data">
-          <input type="file" name="image" accept="image/*" required />
-          <button type="submit">上传热销图片</button>
+        <h2>热销设置</h2>
+        <form class="hot-form" method="post" action="/api/admin/hot-sale">
+          <input name="productNo" placeholder="热销商品序号" value="${escapeHtml(hotSale.productNo || '')}" required />
+          <button type="submit">保存热销设置</button>
         </form>
+        ${
+          hotSaleProduct
+            ? `<div class="hot-product">
+                <img class="hot-thumb" src="${hotSaleProduct.coverUrl || ''}" />
+                <div>
+                  <strong>${escapeHtml(hotSaleProduct.name)}</strong>
+                  <span>序号 ${hotSale.productNo || '-'} / ${categoryText(hotSaleProduct.category)} / ¥${money(hotSaleProduct.price)}</span>
+                  <small>只需填写商品序号。前台热销款会自动读取这件商品的图片、名称和价格，点击后直接进入购买页。</small>
+                </div>
+              </div>`
+            : '<p class="hint">这里只填写商品序号，不上传图片。在下方商品列表查看序号，填入这里后保存。</p>'
+        }
       </section>
       <section class="panel">
         <h2>新增商品</h2>
@@ -311,12 +313,12 @@ export class AdminController {
           <button type="submit">新增商品</button>
         </form>
       </section>
-      <table><thead><tr><th>ID</th><th>商品</th><th>分类</th><th>价格</th><th>图片</th><th>状态</th><th>操作</th></tr></thead><tbody>${rows}</tbody></table>${pager}`,
+      <table><thead><tr><th>序号</th><th>商品</th><th>分类</th><th>价格</th><th>图片</th><th>状态</th><th>操作</th></tr></thead><tbody>${rows}</tbody></table>${pager}`,
     );
   }
 
   private renderOrders(
-    orders: Array<{ id: string; orderNo: string; status: string; payableAmount: number; paidAmount: number; createdAt?: Date; paidAt?: Date }>,
+    orders: Array<{ id: string; orderNo: string; status: string; payableAmount: number; paidAmount: number; remark?: string; createdAt?: Date; paidAt?: Date }>,
     stats: FinanceStats,
   ) {
     const rows = orders
@@ -326,6 +328,7 @@ export class AdminController {
         <td>${statusText(item.status)}</td>
         <td>¥${money(item.payableAmount)}</td>
         <td>¥${money(item.paidAmount)}</td>
+        <td>${item.remark ? escapeHtml(item.remark) : '-'}</td>
         <td>${formatDate(item.paidAt || item.createdAt)}</td>
         <td>
           <form class="inline" method="post" action="/api/admin/orders/${item.id}/delete" onsubmit="return confirm('确定删除订单 ${item.orderNo} 吗？删除后不可恢复。')">
@@ -337,7 +340,7 @@ export class AdminController {
     return this.layout(
       '订单管理',
       `${this.renderPeriodCards(stats)}
-      <table><thead><tr><th>ID</th><th>订单号</th><th>状态</th><th>应付</th><th>已付</th><th>时间</th><th>操作</th></tr></thead><tbody>${rows}</tbody></table>`,
+      <table><thead><tr><th>ID</th><th>订单号</th><th>状态</th><th>应付</th><th>已付</th><th>备注</th><th>时间</th><th>操作</th></tr></thead><tbody>${rows}</tbody></table>`,
     );
   }
 
@@ -435,6 +438,11 @@ export class AdminController {
       form.inline,form.upload{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0}
       .panel{padding:18px;margin:18px 0;background:#fff;border:1px solid #e5e7eb;border-radius:8px}
       .panel h2{margin:0 0 14px;font-size:20px}
+      .hint{margin:10px 0 0;color:#64748b;font-size:13px}
+      .hot-product{display:flex;gap:12px;align-items:center;margin-top:14px;padding:12px;border-radius:8px;background:#f8fafc}
+      .hot-thumb{width:72px;height:72px;object-fit:cover;border-radius:8px;background:#e5e7eb}
+      .hot-product strong,.hot-product span,.hot-product small{display:block}.hot-product span,.hot-product small{margin-top:5px;color:#64748b}
+      .hot-form{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.hot-form input{width:160px}.hot-form button{height:36px}
       form.create{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;align-items:center}
       input,select{padding:8px 10px;border:1px solid #cbd5e1;border-radius:6px;background:#fff}
       input[type=text],input[name=priceYuan]{width:82px}

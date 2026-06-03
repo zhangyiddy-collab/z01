@@ -22,8 +22,8 @@ Page({
       .then(() => wx.showToast({ title: '已加入购物车' }));
   },
   buyNow() {
-    const intent = { productId: String(this.data.id), productIds: [String(this.data.id)], autoPay: true, from: 'product' };
+    const intent = { productId: String(this.data.id), productIds: [String(this.data.id)], quantity: this.data.quantity, autoPay: true, from: 'product' };
     wx.setStorageSync('checkoutIntent', intent);
-    wx.navigateTo({ url: `/pages/address-list/address-list?checkout=1&productId=${this.data.id}&productIds=${this.data.id}&autoPay=1` });
+    wx.navigateTo({ url: `/pages/address-list/address-list?checkout=1&productId=${this.data.id}&productIds=${this.data.id}&quantity=${this.data.quantity}&from=product&autoPay=1` });
   }
 });

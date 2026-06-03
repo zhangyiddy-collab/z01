@@ -8,10 +8,12 @@
       <view class="category {{category === item.value ? 'active' : ''}}" data-value="{{item.value}}" bindtap="selectCategory">{{item.label}}</view>
     </block>
   </scroll-view>
-  <view class="banner {{hotImageUrl ? 'has-image' : ''}}" style="{{hotImageUrl ? 'background-image:url(' + hotImageUrl + ')' : ''}}">
+  <view class="banner {{hotImageUrl ? 'has-image' : ''}}" style="{{hotImageUrl ? 'background-image:url(' + hotImageUrl + ')' : ''}}" bindtap="openHotSale">
     <view class="banner-mask">
-      <view class="title">热销款</view>
-      <view class="desc">KS同款好物，集中采购配送</view>
+      <view class="title">{{hotProductName || '热销款'}}</view>
+      <view class="desc">{{hotProductDesc || '后台输入商品ID后自动读取'}}</view>
+      <view wx:if="{{hotProductPriceText}}" class="banner-price">¥{{hotProductPriceText}}</view>
+      <view class="banner-cta">去购买</view>
     </view>
   </view>
   <block wx:for="{{products}}" wx:key="id">

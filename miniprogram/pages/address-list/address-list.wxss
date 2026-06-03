@@ -2,7 +2,12 @@
   padding: 24rpx;
   margin-bottom: 18rpx;
   background: #fff;
+  border: 2rpx solid transparent;
   border-radius: 16rpx;
+}
+.address.selected {
+  border-color: #22c55e;
+  background: #f0fdf4;
 }
 .checkout-tip {
   padding: 18rpx 22rpx;
@@ -18,8 +23,18 @@
 }
 .actions {
   display: flex;
+  gap: 12rpx;
   justify-content: flex-end;
+  align-items: center;
   margin-top: 16rpx;
+}
+.selected-badge {
+  padding: 10rpx 20rpx;
+  border-radius: 999rpx;
+  background: #dcfce7;
+  color: #16a34a;
+  font-size: 26rpx;
+  font-weight: 800;
 }
 .delete {
   padding: 10rpx 20rpx;
@@ -38,4 +53,26 @@
   background: #22c55e;
   color: #fff;
   font-weight: 700;
+}
+.remark-card {
+  padding: 24rpx;
+  margin-bottom: 18rpx;
+  background: #fff;
+  border-radius: 16rpx;
+}
+.remark-title {
+  font-size: 30rpx;
+  font-weight: 800;
+  margin-bottom: 14rpx;
+}
+.remark-input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 150rpx;
+  padding: 18rpx;
+  border: 1rpx solid #dcfce7;
+  border-radius: 12rpx;
+  background: #f8fafc;
+  font-size: 28rpx;
+  line-height: 1.5;
 }

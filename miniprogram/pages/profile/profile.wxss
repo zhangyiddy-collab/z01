@@ -28,4 +28,14 @@
   background: #fff;
   border-radius: 16rpx;
 }
-
+.contact-menu {
+  width: 100%;
+  border: 0;
+  color: #111827;
+  font-size: 32rpx;
+  line-height: 1.4;
+  text-align: left;
+}
+.contact-menu::after {
+  border: 0;
+}

@@ -44,6 +44,6 @@ Page({
     const productIds = this.data.items.filter((item) => this.data.checked[item.productId]).map((item) => item.productId);
     if (!productIds.length) return wx.showToast({ title: '请选择商品', icon: 'none' });
     wx.setStorageSync('checkoutIntent', { productIds: productIds.map(String), autoPay: true, from: 'cart' });
-    wx.navigateTo({ url: `/pages/address-list/address-list?checkout=1&autoPay=1&productIds=${productIds.join(',')}` });
+    wx.navigateTo({ url: `/pages/address-list/address-list?checkout=1&autoPay=1&from=cart&productIds=${productIds.join(',')}` });
   }
 });

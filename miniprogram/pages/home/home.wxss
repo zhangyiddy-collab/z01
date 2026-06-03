@@ -50,6 +50,9 @@
   color: #fff;
   overflow: hidden;
 }
+.banner:active {
+  opacity: 0.88;
+}
 .banner-mask {
   min-height: 168rpx;
   padding: 28rpx;
@@ -65,6 +68,23 @@
 .desc {
   margin-top: 8rpx;
   font-size: 26rpx;
+}
+.banner-price {
+  margin-top: 10rpx;
+  font-size: 34rpx;
+  font-weight: 800;
+}
+.banner-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 48rpx;
+  padding: 0 20rpx;
+  margin-top: 16rpx;
+  border-radius: 24rpx;
+  background: rgba(255, 255, 255, 0.22);
+  font-size: 24rpx;
+  font-weight: 700;
 }
 .empty {
   padding: 120rpx 0;

@@ -1,25 +1,54 @@
 const { request } = require('../../utils/request');
 
 Page({
-  data: { list: [], checkout: false, productId: '', productIds: [], autoPay: false, submitting: false },
+  data: {
+    list: [],
+    checkout: false,
+    productId: '',
+    productIds: [],
+    selectedAddressId: '',
+    autoPay: false,
+    from: '',
+    quantity: 1,
+    remark: '',
+    submitting: false
+  },
   onLoad(query) {
     const intent = wx.getStorageSync('checkoutIntent') || {};
     const productIds = query.productIds ? query.productIds.split(',').filter(Boolean) : (intent.productIds || []);
+    const from = String(query.from || intent.from || '');
     this.setData({
       checkout: query.checkout === '1' || Boolean(productIds.length),
       productId: String(query.productId || intent.productId || productIds[0] || ''),
       productIds: productIds.map(String),
-      autoPay: query.autoPay === '1' || intent.autoPay === true
+      autoPay: query.autoPay === '1' || intent.autoPay === true,
+      from,
+      quantity: Math.max(1, Number(query.quantity || intent.quantity || 1) || 1),
+      remark: String(intent.remark || wx.getStorageSync('orderRemark') || '')
     });
   },
   onShow() {
     this.load();
   },
   load() {
-    request({ url: '/addresses' }).then((list) => this.setData({ list }));
+    request({ url: '/addresses' }).then((list) => {
+      const selectedAddressId = this.data.selectedAddressId && list.some((item) => String(item.id) === String(this.data.selectedAddressId))
+        ? this.data.selectedAddressId
+        : (list[0] && String(list[0].id)) || '';
+      this.setData({ list, selectedAddressId });
+    });
   },
   add() {
     wx.navigateTo({ url: '/pages/address-edit/address-edit' });
+  },
+  onRemarkInput(e) {
+    this.setData({ remark: e.detail.value });
+  },
+  selectAddress(e) {
+    if (!this.data.checkout) return;
+    const id = e.currentTarget.dataset.id;
+    if (!id) return;
+    this.setData({ selectedAddressId: String(id) });
   },
   remove(e) {
     const id = e.currentTarget.dataset.id;
@@ -37,19 +66,21 @@ Page({
       }
     });
   },
-  choose(e) {
+  submitCheckout() {
     if (!this.data.checkout) return;
     if (!this.data.productIds.length) return wx.showToast({ title: '缺少结算商品', icon: 'none' });
     if (this.data.submitting) return;
-    const addressId = e.currentTarget.dataset.id || (this.data.list[0] && this.data.list[0].id);
+    const addressId = this.data.selectedAddressId;
     if (!addressId) return wx.showToast({ title: '请选择地址', icon: 'none' });
     this.setData({ submitting: true });
     wx.showLoading({ title: '结算中' });
-    const useDirect = this.data.autoPay && this.data.productId;
+    const remark = String(this.data.remark || '').trim();
+    wx.setStorageSync('orderRemark', remark);
+    const useDirect = this.data.autoPay && this.data.from === 'product' && this.data.productId && this.data.productIds.length === 1;
     const url = useDirect ? '/orders/direct-checkout' : (this.data.autoPay ? '/orders/checkout' : '/orders');
     const data = useDirect
-      ? { addressId: String(addressId), productId: String(this.data.productId) }
-      : { addressId: String(addressId), productIds: this.data.productIds.map(String) };
+      ? { addressId: String(addressId), productId: String(this.data.productId), quantity: this.data.quantity, remark }
+      : { addressId: String(addressId), productIds: this.data.productIds.map(String), remark };
     request({ url, method: 'POST', data })
       .then((order) => {
         wx.hideLoading();
@@ -62,5 +93,8 @@ Page({
         this.setData({ submitting: false });
         wx.showToast({ title: error && error.message ? error.message : '结算失败', icon: 'none' });
       });
+  },
+  choose(e) {
+    this.selectAddress(e);
   }
 });
